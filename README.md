@@ -533,6 +533,10 @@ Après une tentative malveillante annulée, révoquer/remplacer rapidement les g
 
 **Ce que l'application signe :** une autorisation Safe / ERC-4337 correctement encodée avec les nonces, domain separation et chain context attendus. **Ne jamais signer aveuglément un hash fourni par FastAPI** : l'app doit reconstruire ou vérifier localement les données critiques avant signature.
 
+**Enforcement des transactions à haute valeur (HighValueGuard) :**
+Pour garantir que la politique de limite de transaction soit respectée de façon cryptographique et décentralisée (on-chain), un `HighValueGuard` est attaché à la `ClientSafe`. 
+Si la transaction dépasse un certain seuil, le Guard requiert une seconde signature de Swissquote (ajoutée aux `signatures` de la Safe). Ainsi, même si le client paye son propre gas ou utilise un bundler public (sans passer par le Paymaster de Swissquote), la transaction sera bloquée par la Safe si elle n'a pas été préalablement approuvée par la compliance de Swissquote.
+
 ### 9.4 `Gasless`
 
 - **ERC-4337 n'est pas le paymaster** : le bundler soumet l'opération, et un paymaster compatible peut en financer le gas.
@@ -1026,7 +1030,7 @@ Documentation officielle et code source utiles :
 | Architecture complète, **mocks identifiés** | Diagrammes Expo, SecureStore, Safe, Candide, FastAPI, RPC | [ ] Mock KYC, compliance, signer institutionnel et banques explicités dans app/demo |
 | Create + lien identité client | EOA sur appareil, KYC simulé + preuve cryptographique de contrôle | [ ] Sign challenge, verify owner, expiration/nonces et rotation testées |
 | Login/auth **avant signature** | `SecureStore.requireAuthentication`, Face ID / biométrie + preview | [ ] Face ID réel, annulation et double transaction testées |
-| **High-value vs small-value** | UX revue + screening supplémentaire (mock) au-delà d'un seuil de démo ; aucun enforcement on-chain annoncé | [ ] Deux scénarios comparés ; promesse mesurée |
+| **High-value vs small-value** | Enforcement on-chain via **HighValueGuard**. Bloque les transferts > seuil sans signature de compliance Swissquote ajoutée au payload. | [ ] Guard déployé et testé avec transactions simulées |
 | Lost / stolen / destroyed → **recover** | Candide 2/3 (SQ, A, B) + **After7Days**, alertes et `cancelRecovery()` on-chain ; refus d’une seule approval | [ ] Réel sur Sepolia ; rejet négatif prouvé |
 | **Swissquote services permanently gone** | Recovery **A+B sans Swissquote** + RPC/bundler indépendant ; Recovery Kit EOA comme seconde voie | [ ] Démo backend banque arrêté et récupération A+B ; délai démo distinct, preuve de solde inchangé |
 | Transaction réellement signée et broadcast | Expo EOA + Safe + ERC20 testnet | [ ] Hash et explorateur |
