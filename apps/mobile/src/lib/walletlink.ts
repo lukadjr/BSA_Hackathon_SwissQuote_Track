@@ -1,11 +1,13 @@
-// Links this phone's owner key to the user's backend account:
-// 1. ask the backend for a challenge, 2. the user reads and confirms it,
-// 3. sign it locally (Face ID), 4. the backend checks the signature.
+// Links this phone's wallet to the user's backend account. Onboarding order:
+// 1. the owner key exists, 2. the Safe address is derived from it (it is
+// counterfactual: nothing is deployed and no network is needed),
+// 3. the backend sends a challenge naming both addresses, the user reads and
+// confirms it, the owner key signs it (Face ID), and the backend checks it.
 import { ApiError, completeLink, requestLinkChallenge } from './api';
 import type { LinkChallenge, LinkResult } from './api';
-import { markWalletLinked } from './linkStatus';
+import { isLinked, markWalletLinked } from './linkStatus';
 import { describeWalletError, getAddress, signMessage } from './wallet';
-import { WalletError } from '@swissquote/wallet-core';
+import { predictSafeAddress, WalletError } from '@swissquote/wallet-core';
 
 export type { LinkChallenge, LinkResult };
 
@@ -13,7 +15,14 @@ function sameAddress(a: string, b: string) {
   return a.toLowerCase() === b.toLowerCase();
 }
 
-/** Step 1: fetch a challenge for the local owner key. Nothing is signed yet. */
+/** True once this phone's owner key and Safe were linked with Swissquote. */
+export async function isWalletLinkComplete(): Promise<boolean> {
+  const owner = await getAddress();
+  if (owner === null) return false;
+  return isLinked(owner, predictSafeAddress(owner));
+}
+
+/** Fetch a challenge naming the owner key and its Safe. Nothing is signed yet. */
 export async function startWalletLink(
   signal?: AbortSignal,
 ): Promise<LinkChallenge> {
@@ -21,22 +30,26 @@ export async function startWalletLink(
   if (address === null) {
     throw new WalletError('WALLET_NOT_FOUND', 'No owner wallet exists.');
   }
-  const challenge = await requestLinkChallenge(address, signal);
-  // Only show (and later sign) a challenge about this phone's own key.
+  const safe = predictSafeAddress(address);
+  const challenge = await requestLinkChallenge(address, safe, signal);
+  // Only show (and later sign) a challenge about this phone's own key and Safe.
+  const text = challenge.message.toLowerCase();
   if (
     !sameAddress(challenge.ownerAddress, address) ||
-    !challenge.message.toLowerCase().includes(address.toLowerCase())
+    !sameAddress(challenge.safeAddress, safe) ||
+    !text.includes(address.toLowerCase()) ||
+    !text.includes(safe.toLowerCase())
   ) {
     throw new ApiError(
       'SERVER',
-      'The server sent a challenge for a different key.',
+      'The server sent a challenge for a different wallet.',
     );
   }
   return challenge;
 }
 
 /**
- * Step 2: call only after the user confirmed `challenge.message` on screen.
+ * Call only after the user confirmed `challenge.message` on screen.
  * Signs exactly that text with the local key, then completes the link.
  */
 export async function confirmWalletLink(
@@ -55,11 +68,15 @@ export async function confirmWalletLink(
     signature,
     options?.signal,
   );
-  if (!result.ownerKeyVerified || !sameAddress(result.ownerAddress, address)) {
-    throw new ApiError('SERVER', 'The server did not confirm this key.');
+  if (
+    !result.ownerKeyVerified ||
+    !sameAddress(result.ownerAddress, address) ||
+    !sameAddress(result.safeAddress, challenge.safeAddress)
+  ) {
+    throw new ApiError('SERVER', 'The server did not confirm this wallet.');
   }
   // Linking is a one-time onboarding step; never offer it again.
-  await markWalletLinked();
+  await markWalletLinked(address, challenge.safeAddress);
   return result;
 }
 

@@ -2,8 +2,8 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { Button } from '../components/Button';
-import { isWalletLinked } from '../lib/linkStatus';
 import { describeWalletError, getAddress } from '../lib/wallet';
+import { isWalletLinkComplete } from '../lib/walletlink';
 
 export default function Startup() {
   const [error, setError] = useState<string | null>(null);
@@ -15,7 +15,7 @@ export default function Startup() {
       .then(async (address) => {
         if (!address) return '/create-wallet' as const;
         // Onboarding is complete only once the new wallet is linked.
-        return (await isWalletLinked())
+        return (await isWalletLinkComplete())
           ? ('/wallet' as const)
           : ('/link-wallet' as const);
       })

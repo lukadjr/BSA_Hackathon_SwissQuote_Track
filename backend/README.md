@@ -1,11 +1,23 @@
 # Swissquote demo backend
 
-FastAPI + SQLAlchemy/SQLite for authenticated prototype metadata. During
-onboarding the mobile app links its owner key: it fetches a challenge, the user
-confirms it, the phone signs it locally (EIP-191) and the backend checks the
-signature. Registration records public
-addresses only and returns `ownership_verified: false`: it is not an on-chain
-proof of control or KYC attestation.
+FastAPI + SQLAlchemy/SQLite for authenticated prototype metadata.
+
+## Wallet linking
+
+Onboarding order on the phone: (1) create the owner key, (2) derive the Safe
+address from it (counterfactual: nothing is deployed), (3) link both with
+Swissquote. For step 3 the app asks for a challenge naming the owner key and the
+Safe, the user reads and confirms it, the phone signs it locally (EIP-191) and the
+backend checks the signature.
+
+The `wallets` table holds one row per user: the owner key, the Safe and the time
+the owner key proved control. A row exists only after a successful link, so
+`ownership_verified` is always `true` when a wallet is returned. Because the owner
+key signed the Safe address, the backend knows the key holder claims that Safe; it
+does not check on-chain that the Safe is owned by that key.
+
+Existing demo databases from before this schema need to be deleted or moved: the
+backend refuses to start on the old schema and says so.
 
 ## Run
 
@@ -35,10 +47,10 @@ identity by changing `user_id`; those requests return `403`.
 | Route | Behavior |
 | --- | --- |
 | `GET /health` | Public health check |
-| `POST /wallets/register` | Register/update the authenticated demo user's unverified metadata |
-| `GET /wallets/{user_id}` | Read that user's metadata; missing registration returns `404` |
-| `POST /wallets/link/challenge` | Issue a single-use, 5-minute challenge message for `owner_address` |
-| `POST /wallets/link/complete` | Check the challenge's EIP-191 signature and record the linked owner key |
+| `POST /wallets/link/challenge` | Issue a single-use, 5-minute challenge message for `owner_address` and `safe_address` |
+| `POST /wallets/link/complete` | Check the challenge's EIP-191 signature, then store the owner key and Safe in `wallets` |
+| `POST /wallets/register` | Change the Safe of a wallet whose owner key is already linked; `409` before linking or for another owner key |
+| `GET /wallets/{user_id}` | Read that user's linked wallet; before linking it returns `404` |
 | `POST /transactions/screen` | Mock policy only: blocked test address, high-value review or approved |
 | `POST /recovery/request` | Validate user and registered Safe, then return `501` |
 | `POST /recovery/swissquote-approve` | Validate user and registered Safe, then return `501`; never emit a fake signature |
@@ -50,6 +62,7 @@ contains `0x000000000000000000000000000000000000dead` and matches case-insensiti
 
 Linking proves control of the owner key only (`owner_key_verified: true`); it is
 not KYC or proof of on-chain Safe ownership. A challenge is burned after one attempt.
+Linking again replaces the user's single wallet row.
 For the phone, set the app's `EXPO_PUBLIC_DEMO_ACCESS_TOKEN` to this disposable
 demo token; anything in an Expo build is readable, so never reuse a real secret.
 

@@ -31,7 +31,8 @@ export default function CreateWalletScreen() {
           Your keys.{'\n'}Your crypto.
         </Text>
         <Text className="text-lg text-muted">
-          Create your wallet on this phone to get started.
+          Create your wallet on this phone. Next, your Safe is prepared and
+          linked to Swissquote.
         </Text>
       </View>
       {error !== null && <Text className="text-base text-accent">{error}</Text>}

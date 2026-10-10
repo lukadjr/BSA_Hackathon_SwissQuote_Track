@@ -28,12 +28,14 @@ export interface LinkChallenge {
   challengeId: string;
   message: string;
   ownerAddress: Address;
+  safeAddress: Address;
   expiresAt: string;
 }
 
 export interface LinkResult {
   userId: string;
   ownerAddress: Address;
+  safeAddress: Address;
   ownerKeyVerified: boolean;
 }
 
@@ -117,18 +119,25 @@ async function request<T>(
 
 export async function requestLinkChallenge(
   ownerAddress: Address,
+  safeAddress: Address,
   signal?: AbortSignal,
 ): Promise<LinkChallenge> {
   const data = await request<{
     challenge_id: string;
     message: string;
     owner_address: Address;
+    safe_address: Address;
     expires_at: string;
-  }>('/wallets/link/challenge', { owner_address: ownerAddress }, signal);
+  }>(
+    '/wallets/link/challenge',
+    { owner_address: ownerAddress, safe_address: safeAddress },
+    signal,
+  );
   return {
     challengeId: data.challenge_id,
     message: data.message,
     ownerAddress: data.owner_address,
+    safeAddress: data.safe_address,
     expiresAt: data.expires_at,
   };
 }
@@ -140,7 +149,7 @@ export async function completeLink(
 ): Promise<LinkResult> {
   const data = await request<{
     owner_key_verified: boolean;
-    data: { user_id: string; owner_address: Address };
+    data: { user_id: string; owner_address: Address; safe_address: Address };
   }>(
     '/wallets/link/complete',
     { challenge_id: challengeId, signature },
@@ -149,6 +158,7 @@ export async function completeLink(
   return {
     userId: data.data.user_id,
     ownerAddress: data.data.owner_address,
+    safeAddress: data.data.safe_address,
     ownerKeyVerified: data.owner_key_verified === true,
   };
 }

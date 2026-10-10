@@ -11,7 +11,7 @@ from eth_account.messages import encode_defunct
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -22,11 +22,15 @@ Base = declarative_base()
 
 
 class WalletDB(Base):
+    """One row per user: the owner key proven by signature, and the user's Safe."""
+
     __tablename__ = "wallets"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(String, unique=True, index=True)
-    safe_address = Column(String)
-    owner_address = Column(String)
+    owner_address = Column(String, nullable=False)
+    safe_address = Column(String, nullable=False)
+    # Set when the owner key signed a link challenge for this owner and Safe.
+    owner_verified_at = Column(DateTime, nullable=False)
 
 
 class LinkChallengeDB(Base):
@@ -34,26 +38,25 @@ class LinkChallengeDB(Base):
     id = Column(String, primary_key=True)
     user_id = Column(String, index=True)
     owner_address = Column(String)
+    safe_address = Column(String)
     message = Column(String)
     expires_at = Column(DateTime)
     used = Column(Boolean, default=False)
 
 
-class LinkedOwnerDB(Base):
-    __tablename__ = "linked_owners"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(String, unique=True, index=True)
-    owner_address = Column(String)
-    linked_at = Column(DateTime)
-
-
 Base.metadata.create_all(bind=engine)
+_columns = {column["name"] for column in inspect(engine).get_columns("wallets")}
+if not {"owner_verified_at", "safe_address"} <= _columns:
+    raise RuntimeError(
+        "The demo database uses an older schema. Delete or move it "
+        f"({SQLALCHEMY_DATABASE_URL}) and restart; it only holds demo data."
+    )
 app = FastAPI(
     title="Swissquote Demo API",
     version="0.1.0",
     description=(
-        "Mock metadata and screening. Owner-key linking checks a signature; "
-        "on-chain ownership and recovery are unimplemented."
+        "Mock metadata and screening. Wallet linking checks an owner-key signature; "
+        "on-chain Safe ownership and recovery are unimplemented."
     ),
 )
 bearer = HTTPBearer(auto_error=False)
@@ -128,13 +131,18 @@ class WalletRegistration(StrictRequest):
 def wallet_response(wallet: WalletDB) -> dict:
     return {
         "success": True,
-        "ownership_verified": False,
+        "ownership_verified": True,
         "data": {
             "user_id": wallet.user_id,
             "safe_address": wallet.safe_address,
             "owner_address": wallet.owner_address,
+            "owner_verified_at": wallet.owner_verified_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
         },
     }
+
+
+def find_wallet(db: Session, user: str) -> WalletDB | None:
+    return db.query(WalletDB).filter(WalletDB.user_id == user).first()
 
 
 @app.post("/wallets/register")
@@ -143,21 +151,16 @@ def register_wallet(
     user: Annotated[str, Depends(current_user)],
     db: Session = Depends(get_db),
 ):
+    """Change the Safe of a wallet whose owner key is already linked by signature."""
     require_user(wallet.user_id, user)
-    existing_wallet = db.query(WalletDB).filter(WalletDB.user_id == user).first()
-    if existing_wallet:
-        existing_wallet.safe_address = wallet.safe_address
-        existing_wallet.owner_address = wallet.owner_address
-        registered = existing_wallet
-    else:
-        registered = WalletDB(**wallet.model_dump())
-        db.add(registered)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Wallet registration conflict") from None
-    return wallet_response(registered)
+    existing_wallet = find_wallet(db, user)
+    if existing_wallet is None:
+        raise HTTPException(status_code=409, detail="Link the owner key before registering a Safe")
+    if existing_wallet.owner_address != wallet.owner_address:
+        raise HTTPException(status_code=409, detail="Owner key does not match the linked key")
+    existing_wallet.safe_address = wallet.safe_address
+    db.commit()
+    return wallet_response(existing_wallet)
 
 
 @app.get("/wallets/{user_id}")
@@ -167,7 +170,7 @@ def get_wallet(
     db: Session = Depends(get_db),
 ):
     require_user(user_id, user)
-    wallet = db.query(WalletDB).filter(WalletDB.user_id == user).first()
+    wallet = find_wallet(db, user)
     if not wallet:
         raise HTTPException(status_code=404, detail="Wallet not found for this user_id")
     return wallet_response(wallet)
@@ -178,6 +181,7 @@ LINK_CHALLENGE_TTL = timedelta(minutes=5)
 
 class LinkChallengeRequest(StrictRequest):
     owner_address: Address
+    safe_address: Address
 
 
 class LinkCompleteRequest(StrictRequest):
@@ -185,13 +189,14 @@ class LinkCompleteRequest(StrictRequest):
     signature: Annotated[str, StringConstraints(pattern=r"^0x[0-9a-fA-F]{130}$")]
 
 
-def link_message(user_id: str, owner: str, nonce: str, expires_at: datetime) -> str:
+def link_message(user_id: str, owner: str, safe: str, nonce: str, expires_at: datetime) -> str:
     # Shown verbatim on the phone before signing; must stay human-readable.
     return "\n".join(
         [
-            "Swissquote Wallet: link this phone's owner key to your account.",
+            "Swissquote Wallet: link this phone's wallet to your account.",
             f"Account: {user_id}",
             f"Owner key: {owner}",
+            f"Safe: {safe}",
             f"Nonce: {nonce}",
             f"Expires: {expires_at.strftime('%Y-%m-%dT%H:%M:%SZ')}",
             "This moves no funds.",
@@ -215,16 +220,20 @@ def create_link_challenge(
         id=secrets.token_urlsafe(24),
         user_id=user,
         owner_address=req.owner_address,
+        safe_address=req.safe_address,
         expires_at=expires_at,
         used=False,
     )
-    challenge.message = link_message(user, req.owner_address, challenge.id, expires_at)
+    challenge.message = link_message(
+        user, req.owner_address, req.safe_address, challenge.id, expires_at
+    )
     db.add(challenge)
     db.commit()
     return {
         "challenge_id": challenge.id,
         "message": challenge.message,
         "owner_address": req.owner_address,
+        "safe_address": req.safe_address,
         "expires_at": expires_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 
@@ -254,18 +263,28 @@ def complete_link(
     if signer is None or signer.lower() != challenge.owner_address:
         raise HTTPException(status_code=401, detail="Signature does not match the owner key")
 
-    linked = db.query(LinkedOwnerDB).filter(LinkedOwnerDB.user_id == user).first()
-    if linked is None:
-        linked = LinkedOwnerDB(user_id=user)
-        db.add(linked)
-    linked.owner_address = challenge.owner_address
-    linked.linked_at = utcnow()
-    db.commit()
+    wallet = find_wallet(db, user)
+    if wallet is None:
+        wallet = WalletDB(user_id=user)
+        db.add(wallet)
+    wallet.owner_address = challenge.owner_address
+    wallet.safe_address = challenge.safe_address
+    wallet.owner_verified_at = utcnow()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Wallet link conflict") from None
     return {
         "success": True,
-        # Proves control of the owner key only; not KYC or on-chain Safe ownership.
+        # Proves control of the owner key, which signed the Safe address too.
+        # Not KYC, and not an on-chain check that the Safe is owned by this key.
         "owner_key_verified": True,
-        "data": {"user_id": user, "owner_address": linked.owner_address},
+        "data": {
+            "user_id": user,
+            "owner_address": wallet.owner_address,
+            "safe_address": wallet.safe_address,
+        },
     }
 
 
@@ -299,7 +318,7 @@ class RecoveryRequest(StrictRequest):
 
 def require_recovery_wallet(req: RecoveryRequest, user: str, db: Session) -> None:
     require_user(req.user_id, user)
-    wallet = db.query(WalletDB).filter(WalletDB.user_id == user).first()
+    wallet = find_wallet(db, user)
     if not wallet:
         raise HTTPException(status_code=404, detail="Wallet not found for this user")
     if req.safe_address != wallet.safe_address.lower():

@@ -3,10 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Text, View } from 'react-native';
 import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
-import { isWalletLinked } from '../../lib/linkStatus';
 import {
   confirmWalletLink,
   describeLinkError,
+  isWalletLinkComplete,
   startWalletLink,
   type LinkChallenge,
   type LinkResult,
@@ -25,7 +25,7 @@ export default function LinkWalletScreen() {
   useEffect(() => {
     const controller = new AbortController();
     // Linking happens once, during wallet creation. Never offer it again.
-    isWalletLinked()
+    isWalletLinkComplete()
       .then(async (done) => {
         if (done) {
           router.replace('/wallet');
@@ -99,14 +99,18 @@ export default function LinkWalletScreen() {
             Wallet linked to Swissquote
           </Text>
           <Text className="text-base text-muted text-center">
-            Swissquote verified that this phone holds your wallet key. You will
-            not need to do this again.
+            Swissquote verified that this phone holds your wallet key and linked
+            it to your Safe. You will not need to do this again.
           </Text>
         </View>
         <View className="bg-white border border-line rounded-3xl p-6 gap-2">
-          <Text className="text-sm text-muted">Linked key</Text>
+          <Text className="text-sm text-muted">Owner key</Text>
           <Text selectable className="text-sm text-ink">
             {linked.ownerAddress}
+          </Text>
+          <Text className="text-sm text-muted">Safe address</Text>
+          <Text selectable className="text-sm text-ink">
+            {linked.safeAddress}
           </Text>
         </View>
         <Button
@@ -121,12 +125,34 @@ export default function LinkWalletScreen() {
     <Screen>
       <Text className="text-2xl font-bold text-ink">Link to Swissquote</Text>
       <Text className="text-base text-muted">
-        Confirm that this phone holds your wallet key. Read the message below,
-        then sign it with Face ID.
+        Your wallet key and your Safe are ready. Confirm with Swissquote that
+        this phone holds the key: read the message below, then sign it with Face
+        ID.
       </Text>
+      <View className="bg-white border border-line rounded-3xl p-6 gap-2">
+        <Text className="text-sm font-semibold text-ink">
+          1. Wallet key created
+        </Text>
+        <Text className="text-sm font-semibold text-ink">
+          {challenge !== null
+            ? '2. Safe address created'
+            : '2. Preparing Safe…'}
+        </Text>
+        <Text className="text-sm text-muted">3. Link with Swissquote</Text>
+      </View>
       {loading && <ActivityIndicator />}
       {challenge !== null && (
         <View className="bg-white border border-line rounded-3xl p-6 gap-2">
+          <Text className="text-sm text-muted">Owner key</Text>
+          <Text selectable className="text-sm text-ink">
+            {challenge.ownerAddress}
+          </Text>
+          <Text className="text-sm text-muted">
+            Safe address (not deployed yet)
+          </Text>
+          <Text selectable className="text-sm text-ink">
+            {challenge.safeAddress}
+          </Text>
           <Text className="text-sm text-muted">You are about to sign</Text>
           <Text selectable className="text-sm font-semibold text-ink">
             {challenge.message}
