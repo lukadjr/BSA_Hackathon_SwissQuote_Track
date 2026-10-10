@@ -1,6 +1,6 @@
 # wallet-core
 
-Package TypeScript indépendant des écrans. Exporte `SEPOLIA`, le contrat `OwnerWallet`, la factory `createOwnerWallet`, le contrat de stockage `OwnerKeyStorage` et les erreurs typées. Création EOA, signature et vérification de messages via viem ; aucun signer Safe ou client RPC n'est connecté.
+Package TypeScript indépendant des écrans. Exporte `SEPOLIA`, le contrat `OwnerWallet`, la factory `createOwnerWallet`, le contrat de stockage `OwnerKeyStorage` et les erreurs typées. Création EOA, signature et vérification de messages via viem ; Safe/ERC-4337 est également intégré via `createSafeWallet` et les RPC Sepolia configurés.
 
 Les dossiers `keys`, `signing`, `safe`, `transactions`, `guardians` et `recovery` réservent les responsabilités de la section 13 du README. Ajouter ici la logique testable ; garder l'adaptateur natif SecureStore au bord du module, sans dépendance UI.
 
@@ -50,6 +50,16 @@ function setupWallet(storage: OwnerKeyStorage) {
 
 The phone demo must create an owner, preserve its address after reopening, sign a
 confirmed test message, and verify the signature. Test cancellation and unavailable
-keys on a real device. Safe deployment, recovery kits and transaction signing remain
-separate implementation tasks; the SecureStore adapter is integrated, with real-device
+keys on a real device. Safe deployment and transaction signing are implemented by the second API below;
+recovery kits and recovery remain separate tasks; the SecureStore adapter is integrated, with real-device
 validation still required for the phone milestone.
+
+## Safe transfer API
+
+`createSafeWallet({ config, storage, activity })` provides `getAccount`,
+`prepareTransfer`, `submitTransfer`, and `confirmTransfer`. Operations are held
+privately behind immutable previews; signing uses a fresh protected key read.
+`activity` persists public pending/confirmed tracking before broadcast. The first
+operation deploys a prefunded, deterministic Safe. Confirmation independently
+checks RPC receipt events, Safe configuration and block balances. Recovery and
+sponsorship are absent. See [Sepolia runbook](../../docs/sepolia-transaction.md).

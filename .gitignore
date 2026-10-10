@@ -73,3 +73,8 @@ Desktop.ini
 .agents/
 .codex/
 .aws/
+
+# Local Sepolia smoke evidence and tracking
+.sepolia-smoke.json
+.sepolia-smoke.json.tmp
+.sepolia-smoke.json.lock

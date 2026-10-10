@@ -1,5 +1,5 @@
-# transactions
+# Transactions
 
-À implémenter : POC B/C : encodage ERC-20, UserOperations ERC-4337, reçus et sponsoring explicite.
+`erc20.ts` validates exact token units and encodes transfers. `userOperation.ts` builds and estimates ERC-4337 operations, authenticates/signs locally, tracks submission durably and verifies events/configuration/balances after two confirmations. Uses self-funded Safe ETH; no paymaster.
 
-Voir les sections 5–9 et 15 du [README](../../../README.md). Aucun comportement livré ici.
+See [Sepolia runbook](../../../docs/sepolia-transaction.md). RPC-mocked tests use real SDK signing; they do not prove a funded Sepolia transfer or native authentication.

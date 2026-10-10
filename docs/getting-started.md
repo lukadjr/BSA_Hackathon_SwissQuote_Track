@@ -11,7 +11,7 @@ npm ci
 npm run mobile:web
 ```
 
-Le parcours de création et signature de clé est maintenant natif : le navigateur affiche une erreur de stockage indisponible, sans fallback de clé en mémoire. Sur téléphone, le startup ouvre `/create-wallet` ou `/wallet` selon l’adresse publique enregistrée ; `/sign-test` signe et vérifie un message EIP-191. Soldes, Send et Recovery restent des aperçus, sans appel API ou blockchain. Aucun dépôt ne doit être effectué.
+Le parcours de création et signature de clé est maintenant natif : le navigateur affiche une erreur de stockage indisponible, sans fallback de clé en mémoire. Sur téléphone, le startup ouvre `/create-wallet` ou `/wallet` selon l’adresse publique enregistrée ; `/sign-test` signe et vérifie un message EIP-191. Wallet/Send disposent désormais du flux Safe/ERC-4337 Sepolia décrit dans [le runbook transaction](sepolia-transaction.md), à configurer et financer avant envoi. Recovery reste un aperçu.
 
 Pour un téléphone, le parcours de référence est un **Development Build** :
 
@@ -80,6 +80,6 @@ la gestion de secrets. Aucune commande `npm audit fix --force` n'a été appliqu
 | Blockchain | `packages/wallet-core` et `config/deployments.example.json`          | POC B/C puis recovery direct SQ/A/B 2/3, dont A+B sans banque                    |
 | Backend    | `backend/app` et `backend/tests`                                     | Preuve de contrôle on-chain, identité renforcée et signer isolé                  |
 
-`wallet-core` expose Sepolia et l’API de clé/signature viem, consommées par l’adaptateur natif SecureStore. `apps/mobile/index.ts` installe l’entropie native avant de charger Expo Router et les routes. `abstractionkit` et les contrats restent à intégrer après les POCs ; les champs de déploiement restent `null` jusqu’à vérification sur Sepolia.
+`wallet-core` expose Sepolia et l’API de clé/signature viem, consommées par l’adaptateur natif SecureStore. `apps/mobile/index.ts` installe l’entropie native avant de charger Expo Router et les routes. `abstractionkit` 0.4.0 et la configuration Safe 1.4.1 / EntryPoint 0.7 sont intégrés. La présence des contrats et les endpoints publics ont été vérifiés en lecture ; le transfert financé et la signature native restent à démontrer. Voir [sepolia-transaction](sepolia-transaction.md).
 
 Sources de configuration : [Expo SDK 57](https://docs.expo.dev/versions/v57.0.0/), [monorepos Expo](https://docs.expo.dev/guides/monorepos/), [installation Expo Router](https://docs.expo.dev/router/installation/), [NativeWind v4](https://www.nativewind.dev/docs/getting-started/installation).

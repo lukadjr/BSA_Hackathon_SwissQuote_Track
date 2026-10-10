@@ -1,10 +1,11 @@
-# Démo du starter
+# Démo transaction Sepolia
 
-Lancer `npm run mobile:web` ou un Development Build, puis :
+Suivre le [runbook Sepolia](sepolia-transaction.md) pour configurer RPC/bundler/token et financer la Safe.
 
-1. Ouvrir la wallet depuis l'accueil.
-2. Lire le solde fictif de demo USDC.
-3. Ouvrir Send, saisir quelques champs et afficher l'aperçu. Aucun envoi.
-4. Revenir et ouvrir Security & recovery pour voir les étapes prévues.
+1. Créer/utiliser l'EOA protégée dans un Development Build et terminer le lien existant à Swissquote.
+2. Lire l'adresse Safe et ses soldes réels sur Wallet ; financer cette adresse avec ETH et tokens Sepolia.
+3. Ouvrir Send, saisir destinataire/montant, vérifier l'aperçu et authentifier la signature locale.
+4. Vérifier le statut jusqu'à deux confirmations et ouvrir le hash sur l'explorateur.
+5. Montrer l'événement Transfer, les soldes et la configuration Safe owner 1/1.
 
-Le scénario final `Create → Protect → Fund → Sign & Send → Lose Access → Recover → Sign again` reste à implémenter selon les sections 9 et 15 du README. Le mock ne valide pas ce scénario.
+Recovery reste un aperçu ; aucune récupération ni sponsoring gas n'est configuré. Tests locaux et exports ne remplacent pas la preuve de transaction financée sur Sepolia ou de biométrie sur appareil.

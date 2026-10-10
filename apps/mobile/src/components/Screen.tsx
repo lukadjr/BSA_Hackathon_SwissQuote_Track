@@ -11,7 +11,7 @@ export function Screen({ children }: PropsWithChildren) {
       <ScrollView contentContainerClassName="grow p-6 gap-6">
         <View className="self-start rounded-full bg-white px-3 py-2 border border-line">
           <Text className="text-xs font-semibold text-muted">
-            UI MOCK · SEPOLIA
+            TESTNET · SEPOLIA
           </Text>
         </View>
         {children}

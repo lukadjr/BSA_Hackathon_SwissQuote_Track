@@ -1,21 +1,24 @@
 {
   "chainId": 11155111,
-  "status": "unconfigured",
-  "safeVersion": null,
-  "entryPointVersion": null,
-  "abstractionkitVersion": null,
+  "status": "contract-presence-checked-transfer-unverified",
+  "safeVersion": "1.4.1",
+  "entryPointVersion": "0.7",
+  "abstractionkitVersion": "0.4.0",
   "contracts": {
-    "safeSingleton": null,
-    "safeProxyFactory": null,
-    "safe4337Module": null,
-    "fallbackHandler": null,
+    "safeSingleton": "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
+    "safeProxyFactory": "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
+    "safe4337Module": "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226",
+    "fallbackHandler": "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226",
     "socialRecoveryModule": null,
-    "entryPoint": null,
-    "testToken": null
+    "entryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+    "testToken": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+    "safeModuleSetup": "0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47"
   },
-  "testTokenDecimals": null,
+  "testTokenDecimals": 6,
   "guardians": {
     "swissquoteGuardianSafe": null,
     "backupGuardianSafe": null
-  }
+  },
+  "safe4337ModuleVersion": "0.3.0",
+  "create2Salt": "0"
 }

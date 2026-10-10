@@ -19,10 +19,12 @@
     "lint": "npm run lint --workspace @swissquote/mobile",
     "test": "vitest run --passWithNoTests",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "sepolia:smoke": "node --import tsx scripts/sepolia-smoke.ts"
   },
   "devDependencies": {
     "prettier": "3.9.10",
+    "tsx": "4.21.0",
     "typescript": "6.0.3",
     "vitest": "5.0.3"
   }

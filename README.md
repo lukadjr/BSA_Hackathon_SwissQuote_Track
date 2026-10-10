@@ -1051,10 +1051,10 @@ Le brief demande de **déclarer les outils d'IA utilisés et leur rôle**. La li
 
 ## Statut du projet
 
-**Prototype Milestone 1 livré ; acceptation sur appareil réel et blockchain encore à prouver.**
+**Milestone 1 livré ; flux transaction Safe/ERC-4337 implémenté, acceptation financée sur Sepolia et appareil réel encore à prouver.**
 
-- **Implémenté :** création EOA et signature/vérification EIP-191 via viem ; adaptateur SecureStore protégé, startup et écran de signature ; annulation sur background/navigation ; API de métadonnées SQLite avec token de démonstration configuré côté serveur et validation stricte. Soldes/transferts restent mockés ; le mobile n'appelle pas encore FastAPI. Voir [getting-started](docs/getting-started.md) et [backend](backend/README.md).
-- **Non implémenté :** preuve de contrôle on-chain, Recovery Kit hors ligne, déploiement Safe, signatures guardian et recovery. Les endpoints backend recovery refusent de procéder (`501`) au lieu de produire une fausse approval.
+- **Implémenté :** création EOA et signature/vérification EIP-191 via viem ; adaptateur SecureStore protégé, startup et écran de signature ; annulation sur background/navigation ; API de métadonnées SQLite avec token de démonstration configuré côté serveur et validation stricte. Wallet/Send lisent les soldes Safe et construisent/signent/soumettent les transferts ERC-20 Sepolia via RPC/bundler configurés ; voir [runbook transaction](docs/sepolia-transaction.md). Voir [getting-started](docs/getting-started.md) et [backend](backend/README.md).
+- **Non implémenté :** preuve de contrôle on-chain, Recovery Kit hors ligne, signatures guardian et recovery. Le code de déploiement Safe et de transfert est implémenté mais pas encore démontré avec une Safe financée sur Sepolia. Les endpoints backend recovery refusent de procéder (`501`) au lieu de produire une fausse approval.
 
 - **Décidé :** Expo/React Native, EOA client locale avec Face ID/biométrie à la signature, ClientSafe, **3 guardians directs SQ/A/B, recovery 2/3**, contestation **7 jours on-chain**, FastAPI, Sepolia.
 - **Proposé :** watcher des événements de recovery + alertes push/email/SMS/in-app ; signer Swissquote testnet isolé ; Safe institutionnelle ERC-1271 facultative.

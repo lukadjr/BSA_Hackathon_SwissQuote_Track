@@ -41,6 +41,16 @@ export function describeWalletError(e: unknown): string {
         return 'The message cannot be signed.';
       case 'SIGNING_FAILED':
         return 'Signing failed. Nothing was returned.';
+      case 'CHAIN_CONFIG_INVALID':
+      case 'NETWORK_FAILED':
+      case 'SAFE_CONFIG_INVALID':
+      case 'INVALID_TRANSFER':
+      case 'INSUFFICIENT_FUNDS':
+      case 'TRANSFER_EXPIRED':
+      case 'TRANSFER_PENDING':
+      case 'TRANSFER_FAILED':
+      case 'VERIFICATION_FAILED':
+        return e.message;
       default:
         return 'Storage error. Please try again.';
     }
