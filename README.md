@@ -548,6 +548,14 @@ Après une tentative malveillante annulée, révoquer/remplacer rapidement les g
 
 **Ce que l'application signe :** une autorisation Safe / ERC-4337 correctement encodée avec les nonces, domain separation et chain context attendus. **Ne jamais signer aveuglément un hash fourni par FastAPI** : l'app doit reconstruire ou vérifier localement les données critiques avant signature.
 
+**Contrat optionnel HighValueGuard :**
+Le contrat est intégré et testé sur une Safe réelle dans un EVM local : il vérifie
+une vraie co-signature Swissquote pour les transferts élevés et les appels
+administratifs/batches. Les seuils ETH et token ont des unités distinctes. Il
+n'est **pas attaché aux wallets mobiles** et aucun parcours de co-signature
+compliance n'est exposé dans l'app. Les appels via modules Safe ne passent pas
+par ce transaction guard. Voir [les limites](contracts/README.md).
+
 ### 9.4 `Gasless`
 
 - **ERC-4337 n'est pas le paymaster** : le bundler soumet l'opération, et un paymaster compatible peut en financer le gas.
@@ -1045,8 +1053,8 @@ Documentation officielle et code source utiles :
 | Architecture complète, **mocks identifiés** | Diagrammes Expo, SecureStore, Safe, Candide, FastAPI, RPC | [ ] Mock KYC, compliance, signer institutionnel et banques explicités dans app/demo |
 | Create + lien identité client | EOA sur appareil, KYC simulé + preuve cryptographique de contrôle | [ ] Sign challenge, verify owner, expiration/nonces et rotation testées |
 | Login/auth **avant signature** | `SecureStore.requireAuthentication`, Face ID / biométrie + preview | [ ] Face ID réel, annulation et double transaction testées |
-| **High-value vs small-value** | UX revue + screening supplémentaire (mock) au-delà d'un seuil de démo ; aucun enforcement on-chain annoncé | [ ] Deux scénarios comparés ; promesse mesurée |
-| Lost / stolen / destroyed → **recover** | Candide 2/3 (SQ, A, B) + **After7Days**, alertes et `cancelRecovery()` on-chain ; refus d’une seule approval | [ ] Réel sur Sepolia ; rejet négatif prouvé |
+| **High-value vs small-value** | Contrat **HighValueGuard** testé séparément sur Safe ; non activé dans l’app. Co-signature réelle, portée limitée à execTransaction. | [ ] Guard déployé et testé avec transactions simulées |
+| Lost / stolen / destroyed → **recover** | Candide 2/3 (SQ, A, B) + **After3Days**, alertes et `cancelRecovery()` on-chain ; refus d’une seule approval | [ ] Réel sur Sepolia ; rejet négatif prouvé |
 | **Swissquote services permanently gone** | Recovery **A+B sans Swissquote** + RPC/bundler indépendant ; Recovery Kit EOA comme seconde voie | [ ] Démo backend banque arrêté et récupération A+B ; délai démo distinct, preuve de solde inchangé |
 | Transaction réellement signée et broadcast | Expo EOA + Safe + ERC20 testnet | [ ] Hash et explorateur |
 | Custody legal grey zone | Deux guardians quelconques peuvent collectivement changer l’owner **après 3 jours** sans signature actuelle du client ; non-custodial **non conclu** | [ ] Explication juridique honnête |
