@@ -1,0 +1,29 @@
+{
+  "name": "swissquote-wallet",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/mobile",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "mobile": "npm run start --workspace @swissquote/mobile --",
+    "mobile:go": "npm run start:go --workspace @swissquote/mobile --",
+    "mobile:web": "npm run web --workspace @swissquote/mobile --",
+    "mobile:android": "npm run android --workspace @swissquote/mobile --",
+    "mobile:ios": "npm run ios --workspace @swissquote/mobile --",
+    "typecheck": "npm run typecheck --workspaces",
+    "lint": "npm run lint --workspace @swissquote/mobile",
+    "test": "vitest run --passWithNoTests",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "vitest": "5.0.3"
+  }
+}

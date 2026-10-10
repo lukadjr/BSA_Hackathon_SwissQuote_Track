@@ -5,6 +5,22 @@
 > **Plateformes :** iOS / Android · **Réseau cible :** Ethereum Sepolia (`chainId: 11155111`).  
 > **Langues :** application et pitch potentiellement en anglais ; documentation technique en français.
 
+## Starter disponible
+
+Le monorepo contient maintenant un **starter**, sans implémentation wallet/blockchain :
+Expo/React Native + Router + NativeWind, quatre écrans mockés, package `wallet-core`
+avec métadonnées Sepolia, et FastAPI avec `GET /health` uniquement.
+
+```bash
+npm ci
+npm run mobile:web      # aperçu rapide dans le navigateur
+# npm run mobile:android ou npm run mobile:ios pour un Development Build
+```
+
+Installation backend, test sur téléphone, vérifications et points d'entrée :
+[Guide de démarrage](docs/getting-started.md).
+Les sections suivantes décrivent **l'architecture cible**, encore à implémenter.
+
 ## Sommaire
 
 1. [Vision et périmètre](#1-vision-et-périmètre)
@@ -633,34 +649,29 @@ AuditEvent(id, case_id, actor, action, timestamp, metadata)
 ```text
 swissquote-wallet/
 ├── README.md
-├── .gitignore
-├── package.json                   # scripts workspace (à créer)
-├── package-lock.json / pnpm-lock.yaml
+├── package.json / package-lock.json  # npm workspaces et scripts
 ├── apps/
-│   ├── mobile/                    # Expo / React Native
-│   │   ├── app/                   # routes Expo Router
-│   │   ├── components/            # éléments UI
-│   │   ├── features/
-│   │   │   ├── onboarding/
-│   │   │   ├── wallet/
-│   │   │   ├── transfer/
-│   │   │   └── recovery/
-│   │   ├── hooks/
-│   │   ├── theme/
+│   ├── mobile/                      # Expo / React Native
+│   │   ├── src/
+│   │   │   ├── app/                 # routes Expo Router
+│   │   │   ├── components/
+│   │   │   ├── features/            # onboarding, wallet, transfer, recovery
+│   │   │   ├── hooks/
+│   │   │   └── theme/
 │   │   └── app.config.ts
-│   └── swissquote-demo/          # interface bancaire/admin simulée, optionnelle
-├── packages/
-│   └── wallet-core/              # TS, indépendant des écrans
-│       ├── keys/                 # génération, adresse, stockage adapté à Expo
-│       ├── signing/              # validation et signatures locales
-│       ├── safe/                 # création, owners, modules, config
-│       ├── transactions/         # ERC-20, ERC-4337, receipts
-│       ├── guardians/            # signatures Safes contractuelles, EIP-1271
-│       ├── recovery/             # requêtes, approbations, finalisation
-│       └── config/               # contrats et chaînes versionnés
+│   └── swissquote-demo/             # emplacement optionnel, README uniquement
+├── packages/wallet-core/
+│   ├── index.ts                     # export des métadonnées Sepolia
+│   ├── config/chains.ts
+│   ├── keys/                        # responsabilités documentées, à implémenter
+│   ├── signing/
+│   ├── safe/
+│   ├── transactions/
+│   ├── guardians/
+│   └── recovery/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py
+│   │   ├── main.py                  # health uniquement
 │   │   ├── auth/
 │   │   ├── wallet_registry/
 │   │   ├── guardian_policy/
@@ -669,13 +680,15 @@ swissquote-wallet/
 │   │   ├── transactions/
 │   │   └── sponsorship/
 │   ├── tests/
-│   └── requirements.txt / pyproject.toml
+│   ├── pyproject.toml
+│   └── requirements.txt / requirements-dev.txt
 ├── tests/
-│   ├── wallet-core/
-│   └── e2e-sepolia/
-├── config/
-│   └── deployments.example.json   # pas d'adresses imaginaires dans la config réelle
+│   ├── wallet-core/                 # Vitest prêt ; tests à écrire
+│   └── e2e-sepolia/                 # POCs à écrire
+├── config/deployments.example.json  # champs null, aucun déploiement revendiqué
+├── .github/workflows/ci.yml
 └── docs/
+    ├── getting-started.md
     ├── threat-model.md
     ├── custody-model.md
     ├── recovery-runbook.md
@@ -683,7 +696,7 @@ swissquote-wallet/
     └── demo-script.md
 ```
 
-Cette arborescence décrit le **repo à créer** ; le présent README n'implique pas que les dossiers et scripts existent déjà.
+Cette arborescence est créée. Les dossiers réservés et les documents de travail ne constituent pas une implémentation des fonctions cible.
 
 ---
 
@@ -698,22 +711,13 @@ Cette arborescence décrit le **repo à créer** ; le présent README n'implique
 - Comptes/testnet RPC, bundler et paymaster ; token ERC-20 de test disponible.
 - Configuration des adresses **réelles** de contrats (Safe, modules, EntryPoint, recovery) pour Sepolia.
 
-### 14.2 Initialisation suggérée (une fois le repo créé)
+### 14.2 Démarrage du starter
 
-```bash
-# Exemple de bootstrap Expo (à adapter au monorepo et aux versions SDK)
-npx create-expo-app@latest apps/mobile
-cd apps/mobile
-npx expo install expo-secure-store expo-crypto expo-router
-npm install viem abstractionkit
-
-# Lorsque la configuration du projet natif est prête
-npx expo run:ios        # depuis un Mac avec Xcode configuré
-# ou
-npx expo run:android
-```
-
-Ces commandes sont **indicatives**, pas un projet exécutable livré ici. Ajuster les modules RN, styles, plugins et versions d'après les tests de compatibilité. Utiliser un **Development Build** dès qu'un module natif ou sa configuration l'exige.
+Suivre le [guide de démarrage](docs/getting-started.md) : `npm ci` à la racine,
+puis aperçu web ou Development Build mobile, et venv Python pour FastAPI.
+Le projet Expo est déjà initialisé ; ne pas relancer `create-expo-app` dessus.
+Les packages natifs sont installés, mais leur usage pour la gestion des clés
+reste à implémenter et valider. Les SDK blockchain seront choisis pendant les POCs.
 
 ### 14.3 Exemple de variables d'environnement (sans secrets)
 
@@ -891,7 +895,10 @@ Documentation officielle et code source utiles :
 
 ## Statut du projet
 
-**Documentation d'architecture, pas code livré.**
+**Starter livré ; architecture wallet et intégrations à implémenter.**
+
+- **Livré :** structure npm/TypeScript, mobile mock minimal, FastAPI health, configuration exemple, checks et CI.
+- **Mock uniquement :** accueil, solde, aperçu Send et étapes Recovery ; aucun secret généré, transfert ou recovery exécuté.
 
 - **Décidé :** Expo/React Native, clé EOA locale, ClientSafe, Swissquote guardian obligatoire **avec second guardian**, FastAPI, Sepolia.
 - **Proposé :** `SwissquoteGuardianSafe` `2/3` et `BackupGuardianSafe` `1/2` validées via ERC-1271 dans le module Candide `2/2`.

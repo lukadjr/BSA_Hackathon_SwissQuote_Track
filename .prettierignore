@@ -1,0 +1,11 @@
+README.md
+package-lock.json
+backend/
+node_modules/
+dist/
+.expo/
+apps/mobile/ios/
+apps/mobile/android/
+.agents/
+.aws/
+.codex/

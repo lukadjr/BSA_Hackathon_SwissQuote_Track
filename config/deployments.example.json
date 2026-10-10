@@ -1,0 +1,21 @@
+{
+  "chainId": 11155111,
+  "status": "unconfigured",
+  "safeVersion": null,
+  "entryPointVersion": null,
+  "abstractionkitVersion": null,
+  "contracts": {
+    "safeSingleton": null,
+    "safeProxyFactory": null,
+    "safe4337Module": null,
+    "fallbackHandler": null,
+    "socialRecoveryModule": null,
+    "entryPoint": null,
+    "testToken": null
+  },
+  "testTokenDecimals": null,
+  "guardians": {
+    "swissquoteGuardianSafe": null,
+    "backupGuardianSafe": null
+  }
+}
