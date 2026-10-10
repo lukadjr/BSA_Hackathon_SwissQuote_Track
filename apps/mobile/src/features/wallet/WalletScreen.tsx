@@ -7,6 +7,7 @@ import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
 import { useOwnerAddress } from '../../hooks/useOwnerAddress';
 import { resetWalletForDev } from '../../lib/devReset';
+import { clearSession, getSession } from '../../lib/auth';
 import { describeWalletError } from '../../lib/wallet';
 import { getSafeAccount } from '../../lib/safeWallet';
 import { useSecurityState } from '../../hooks/useSecurityState';
@@ -39,6 +40,14 @@ export default function WalletScreen() {
   const [chainError, setChainError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const security = useSecurityState();
+  const [sessionUser, setSessionUser] = useState<string | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      getSession()
+        .then((s) => setSessionUser(s?.username ?? null))
+        .catch((e) => setChainError(describeWalletError(e)));
+    }, []),
+  );
   useFocusEffect(
     useCallback(() => {
       setAttempt((value) => value + 1);
@@ -127,8 +136,8 @@ export default function WalletScreen() {
             </Text>
             <Text className="text-sm text-muted">
               Add test tokens from the demo bank or receive the configured token
-              at this Safe address. Outgoing fee sponsorship is a separate
-              integration.
+              at this Safe address. Swissquote pays the network fee for
+              transfers and recovery while its treasury service is available.
             </Text>
           </>
         )}
@@ -171,6 +180,17 @@ export default function WalletScreen() {
         label="Be a guardian for a friend"
         secondary
         onPress={() => router.push('/guardian')}
+      />
+      <Button
+        label={
+          sessionUser ? `Log out (${sessionUser})` : 'Log in to Swissquote'
+        }
+        secondary
+        onPress={() => {
+          clearSession()
+            .then(() => router.replace('/login'))
+            .catch((e) => Alert.alert('Logout failed', describeWalletError(e)));
+        }}
       />
       <Text className="text-sm text-muted">Sepolia testnet only.</Text>
     </Screen>
