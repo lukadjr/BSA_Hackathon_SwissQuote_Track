@@ -214,7 +214,7 @@ describe('Safe identity linking with real local signatures', () => {
 
   it('does not issue a challenge for a predicted undeployed Safe', async () => {
     account.deployed = false;
-    await expect(startWalletLink()).rejects.toThrow('pending deployment');
+    await expect(startWalletLink()).rejects.toThrow('not deployed yet');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

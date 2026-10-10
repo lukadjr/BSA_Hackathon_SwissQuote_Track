@@ -31,6 +31,8 @@ export default function ProtectScreen() {
   const [friend, setFriend] = useState<Address | null>(null);
   const [swissquote, setSwissquote] = useState<Address | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Guardians live in a Safe module, so the Safe must exist on-chain first.
+  const [notDeployed, setNotDeployed] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -41,7 +43,7 @@ export default function ProtectScreen() {
       .then(([state, sq]) => {
         if (controller.signal.aborted) return;
         if (!state.deployed) {
-          router.replace('/add-money');
+          setNotDeployed(true);
           return;
         }
         if (state.recovery) {
@@ -78,7 +80,24 @@ export default function ProtectScreen() {
           <ErrorText error={error} />
         </Card>
       )}
-      {!safe && !error && <ActivityIndicator />}
+      {notDeployed && (
+        <Card>
+          <Text className="text-lg font-semibold text-ink">
+            Your Safe is not deployed yet
+          </Text>
+          <Text className="text-base text-muted">
+            Recovery guardians are stored in your Safe on Sepolia. Add money
+            once from the demo bank: Swissquote then deploys your Safe, and you
+            can come back here to add guardians.
+          </Text>
+          <Button
+            label="Add money"
+            onPress={() => router.replace('/add-money')}
+          />
+          <Button label="Back" secondary onPress={() => router.back()} />
+        </Card>
+      )}
+      {!safe && !error && !notDeployed && <ActivityIndicator />}
       {safe && step === 'intro' && (
         <Card>
           <Text className="text-base text-muted">

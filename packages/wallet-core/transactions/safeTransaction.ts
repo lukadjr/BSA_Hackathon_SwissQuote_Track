@@ -6,6 +6,7 @@ import {
   formatUnits,
   getAddress,
   hashTypedData,
+  isAddress,
   isAddressEqual,
   parseAbi,
   zeroAddress,
@@ -244,6 +245,12 @@ export function createTreasuryOperations({
       throw new WalletError(
         'SAFE_CONFIG_INVALID',
         'Deploy your wallet through Add money first.',
+      );
+    // getAddress throws a raw viem error on malformed input; report it as a transfer error.
+    if (!isAddress(input.recipient, { strict: false }))
+      throw new WalletError(
+        'INVALID_TRANSFER',
+        'Enter a valid, nonzero recipient address.',
       );
     const recipient = getAddress(input.recipient);
     const { units, data } = encodeTransfer(

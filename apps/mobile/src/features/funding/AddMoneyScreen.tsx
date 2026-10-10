@@ -341,7 +341,7 @@ export default function AddMoneyScreen() {
         secondary
         disabled={busy}
         label="Back to wallet"
-        onPress={() => router.replace('/wallet')}
+        onPress={() => router.dismissTo('/wallet')}
       />
     </Screen>
   );

@@ -198,6 +198,12 @@ describe('treasury Safe transaction signing and tracking', () => {
     expect(sent.validUntil).toBe('0');
     expect(pending?.transaction.nonce).toBe('0');
   });
+  it('reports an empty or malformed recipient as an invalid transfer', async () => {
+    for (const bad of ['', '0x123', 'not-an-address'])
+      await expect(
+        wallet.prepareTransfer({ recipient: bad as Address, amount: '1' }),
+      ).rejects.toMatchObject({ code: 'INVALID_TRANSFER' });
+  });
   it('rejects a cloned or changed preview without reading the key', async () => {
     const preview = await wallet.prepareTransfer({ recipient, amount: '1' });
     await expect(

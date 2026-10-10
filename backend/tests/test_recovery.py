@@ -353,3 +353,21 @@ def test_invite_message_format():
             "This moves no funds.",
         ]
     )
+
+
+def test_rpc_sends_a_user_agent(monkeypatch):
+    # publicnode (Cloudflare) answers 403 to urllib's default User-Agent.
+    import io
+
+    from app import chain
+
+    seen = {}
+
+    def fake_urlopen(request, timeout):
+        seen["ua"] = request.get_header("User-agent")
+        return io.BytesIO(b'{"jsonrpc":"2.0","id":1,"result":"0xaa36a7"}')
+
+    monkeypatch.setenv("SEPOLIA_RPC_URL", "https://rpc.example")
+    monkeypatch.setattr(chain.urllib.request, "urlopen", fake_urlopen)
+    assert chain.chain_id() == chain.CHAIN_ID
+    assert seen["ua"] and "Python-urllib" not in seen["ua"]

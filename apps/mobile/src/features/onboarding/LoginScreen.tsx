@@ -13,12 +13,8 @@ export default function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // DEMO ONLY: any username and password are accepted (see loginToDemo).
   async function onLogin() {
-    if (!username.trim() || !password) {
-      setError('Please enter your Swissquote username and password');
-      return;
-    }
-
     setBusy(true);
     setError(null);
 
@@ -46,8 +42,8 @@ export default function LoginScreen() {
           Log in to your account
         </Text>
         <Text className="text-base text-muted">
-          Mock Swissquote login for this test build. Use the demo client ID and
-          any non-empty demo password; no real banking password is checked.
+          Demo login: any username and any password are accepted. Nothing is
+          checked and no real banking password should be entered.
         </Text>
       </View>
 
@@ -72,7 +68,7 @@ export default function LoginScreen() {
           </Text>
           <TextInput
             className="border border-line rounded-xl px-4 py-3 text-ink text-base bg-canvas"
-            placeholder="Demo password (any non-empty value)"
+            placeholder="Any value (demo)"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -91,11 +87,11 @@ export default function LoginScreen() {
         onPress={() => {
           getAddress()
             .then((address) => {
-              if (!address)
-                throw new Error(
-                  'Create a wallet after demo login, or choose recovery.',
+              if (address) router.replace('/wallet');
+              else
+                setError(
+                  'No wallet on this phone yet. Log in to create one, or recover an existing wallet.',
                 );
-              router.replace('/wallet');
             })
             .catch((e) => setError(describeWalletError(e)));
         }}

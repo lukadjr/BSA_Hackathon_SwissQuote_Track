@@ -8,6 +8,12 @@ from app import main
 from app.main import Base, app, get_db
 
 
+@pytest.fixture(autouse=True)
+def product_recovery_policy(monkeypatch):
+    # backend/.env may enable the 3-minute demo module locally; tests assume the product policy.
+    monkeypatch.setenv("RECOVERY_ALLOW_DEMO", "false")
+
+
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setenv("MOCK_ACCESS_TOKEN", "test-only-demo-token-" + "x" * 32)

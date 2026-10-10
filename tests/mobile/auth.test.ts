@@ -42,9 +42,10 @@ beforeEach(() => {
   );
 });
 describe('mock login integration', () => {
-  it('verifies the configured backend identity before persisting a session without approving KYC', async () => {
-    const profile = await loginToDemo('demo-user', 'demo-password');
-    expect(profile.kyc_status).toBe('pending');
+  it('accepts any username and password and never stores the password', async () => {
+    const result = await loginToDemo('anyone', 'whatever');
+    expect(result.username).toBe('anyone');
+    expect(result.profile?.kyc_status).toBe('pending');
     expect(fetch).toHaveBeenCalledWith(
       'http://demo.test/auth/me',
       expect.objectContaining({
@@ -55,17 +56,22 @@ describe('mock login integration', () => {
       }),
     );
     expect(await getSession()).toEqual({
-      username: 'demo-user',
+      username: 'anyone',
       token: 'disposable-demo-token',
     });
     expect(store.values.size).toBe(2);
-    expect([...store.values.values()]).not.toContain('demo-password');
+    expect([...store.values.values()]).not.toContain('whatever');
   });
-  it('refuses an arbitrary identity', async () => {
-    await expect(loginToDemo('other-user', 'demo')).rejects.toThrow(
-      'client ID',
-    );
-    expect(store.values.size).toBe(0);
+  it('accepts an empty username and password', async () => {
+    const result = await loginToDemo('  ', '');
+    expect(result.username).toBe('demo-user');
+    expect((await getSession())?.username).toBe('demo-user');
+  });
+  it('still logs in when the backend is unreachable', async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new TypeError('offline'));
+    const result = await loginToDemo('demo-user', 'demo');
+    expect(result.profile).toBeNull();
+    expect(await getSession()).not.toBeNull();
   });
   it('does not manufacture a token when configuration is missing', async () => {
     vi.stubEnv('EXPO_PUBLIC_DEMO_ACCESS_TOKEN', '');
@@ -75,7 +81,7 @@ describe('mock login integration', () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(store.values.size).toBe(0);
   });
-  it('does not fake success when the backend refuses login', async () => {
+  it('reports a demo token the backend refuses', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
       status: 401,

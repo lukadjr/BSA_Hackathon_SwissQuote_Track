@@ -88,7 +88,7 @@ export async function startWalletLink(
   if (!account.deployed)
     throw new ApiError(
       'REJECTED',
-      'Your Safe is pending deployment. Complete its first testnet transfer, then return to link it.',
+      'Your Safe is not deployed yet. Use Add money to deploy it, then return to link it.',
     );
   await registerWallet(
     identity.client_id,

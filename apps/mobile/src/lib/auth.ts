@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { WalletError } from '@swissquote/wallet-core';
-import { getClientIdentity } from './api';
+import { ApiError, getClientIdentity, type ClientIdentity } from './api';
 
 const SESSION_TOKEN_KEY = 'sq_session_token';
 const SESSION_USER_KEY = 'sq_session_user';
@@ -57,15 +57,36 @@ export async function setSession(
     );
   }
 }
-/** UI-only demo session; bank identity and KYC remain controlled by the backend. */
-export async function loginToDemo(username: string, password: string) {
-  if (!username.trim() || !password)
-    throw new Error('Enter a demo client ID and password.');
-  const profile = await getClientIdentity();
-  if (profile.client_id !== username.trim())
-    throw new Error('Use the client ID configured by the demo operator.');
+/**
+ * DEMO ONLY: accepts any username and any password; the password is never
+ * checked, sent or stored. The backend knows a single mock client and every
+ * demo login maps to it through the bundled demo token. Replace with real bank
+ * authentication before any non-demo build.
+ */
+export const DEMO_DEFAULT_USERNAME = 'demo-user';
+
+export async function loginToDemo(username: string, _password: string) {
   const token = process.env.EXPO_PUBLIC_DEMO_ACCESS_TOKEN?.trim();
-  if (!token) throw new Error('Demo access token is not configured.');
-  await setSession(profile.client_id, token);
-  return profile;
+  if (!token)
+    throw new ApiError(
+      'NOT_CONFIGURED',
+      'Demo access token is not configured (EXPO_PUBLIC_DEMO_ACCESS_TOKEN).',
+    );
+  let profile: ClientIdentity | null = null;
+  try {
+    profile = await getClientIdentity();
+  } catch (e) {
+    // A token the backend refuses would break every later call: say so now.
+    if (e instanceof ApiError && e.code === 'UNAUTHORIZED')
+      throw new ApiError(
+        'UNAUTHORIZED',
+        'The backend refused the demo token. EXPO_PUBLIC_DEMO_ACCESS_TOKEN must equal the backend MOCK_ACCESS_TOKEN.',
+        e.status,
+      );
+    if (e instanceof ApiError && e.code === 'NOT_CONFIGURED') throw e;
+    // Backend offline: the self-custody wallet still works without it.
+  }
+  const name = username.trim() || DEMO_DEFAULT_USERNAME;
+  await setSession(name, token);
+  return { username: name, profile };
 }

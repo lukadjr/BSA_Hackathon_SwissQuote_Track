@@ -1,5 +1,5 @@
 import qrcode from 'qrcode-generator';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { View } from 'react-native';
 
 /** Pure-JS QR code drawn with Views (no native module). */
@@ -10,6 +10,11 @@ export function QrCode({
   value: string;
   size?: number;
 }) {
+  useEffect(() => {
+    // Development only: simulators have no camera, so the paired simulator
+    // pastes this text into the scanner's dev fallback instead.
+    if (__DEV__) console.log(`[dev] QR content: ${value}`);
+  }, [value]);
   const rows = useMemo(() => {
     const qr = qrcode(0, 'M');
     qr.addData(value);

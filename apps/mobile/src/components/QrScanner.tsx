@@ -1,5 +1,5 @@
-import { useRef } from 'react';
-import { Modal, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Modal, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from './Button';
 
@@ -34,6 +34,7 @@ export function QrScanner(props: Props) {
             This build has no camera module. Rebuild the app (npx expo run:ios)
             to scan QR codes.
           </Text>
+          {__DEV__ && <DevPasteFallback onScanned={props.onScanned} />}
           <Button label="Close" secondary onPress={props.onClose} />
         </SafeAreaView>
       </Modal>
@@ -86,8 +87,48 @@ function CameraScanner({
             />
           </View>
         )}
+        {__DEV__ && (
+          <DevPasteFallback
+            onScanned={(text) => {
+              if (done.current) return;
+              done.current = true;
+              onScanned(text);
+            }}
+          />
+        )}
         <Button label="Cancel" secondary onPress={onClose} />
       </SafeAreaView>
     </Modal>
+  );
+}
+
+/**
+ * Development only: simulators have no camera. Paste the QR text that the
+ * other device logs to Metro ("[dev] QR content: ...") instead of scanning.
+ */
+function DevPasteFallback({
+  onScanned,
+}: {
+  onScanned: (text: string) => void;
+}) {
+  const [text, setText] = useState('');
+  return (
+    <View className="gap-2">
+      <TextInput
+        accessibilityLabel="Paste QR content (dev)"
+        className="bg-white rounded-xl px-4 py-3 text-ink"
+        placeholder="Dev: paste QR content"
+        autoCapitalize="none"
+        autoCorrect={false}
+        value={text}
+        onChangeText={setText}
+      />
+      <Button
+        label="Use pasted code (dev)"
+        secondary
+        disabled={!text.trim()}
+        onPress={() => onScanned(text.trim())}
+      />
+    </View>
   );
 }

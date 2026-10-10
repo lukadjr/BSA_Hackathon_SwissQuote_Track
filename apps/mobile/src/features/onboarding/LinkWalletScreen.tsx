@@ -149,7 +149,7 @@ export default function LinkWalletScreen() {
         />
         <Button
           label="Open my wallet"
-          onPress={() => router.replace('/wallet')}
+          onPress={() => router.dismissTo('/wallet')}
         />
       </Screen>
     );
@@ -206,7 +206,7 @@ export default function LinkWalletScreen() {
         label="Open testnet wallet"
         secondary
         disabled={busy}
-        onPress={() => router.replace('/wallet')}
+        onPress={() => router.dismissTo('/wallet')}
       />
       <Text className="text-sm text-muted">
         Bank linking requires a deployed Safe. Use Add money to deploy it first;

@@ -41,8 +41,11 @@ def rpc_url() -> str:
 
 def rpc(method: str, params: list) -> object:
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+    # Public RPCs behind Cloudflare (e.g. publicnode) answer 403 to urllib's default UA.
     request = urllib.request.Request(
-        rpc_url(), data=body, headers={"Content-Type": "application/json"}
+        rpc_url(),
+        data=body,
+        headers={"Content-Type": "application/json", "User-Agent": "SwissquoteWalletPrototype/0.1"},
     )
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
