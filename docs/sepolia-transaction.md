@@ -1,5 +1,8 @@
 # One Safe transfer on Sepolia
 
+For the complete implementation explanation, file inventory and exact code diff,
+see [the detailed test handoff](sepolia-test-handoff.md).
+
 This milestone implements a single-owner Safe and a self-funded ERC-4337 ERC-20
 transfer. Recovery and paymaster sponsorship are not configured. The Safe receives
 assets; the phone's EOA signs. The first UserOperation deploys the prefunded Safe
