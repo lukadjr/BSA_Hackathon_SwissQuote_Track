@@ -17,6 +17,7 @@ const config: ExpoConfig = {
   plugins: [
     'expo-router',
     'expo-secure-store',
+    './plugins/with-scene-lifecycle',
     [
       'expo-local-authentication',
       {

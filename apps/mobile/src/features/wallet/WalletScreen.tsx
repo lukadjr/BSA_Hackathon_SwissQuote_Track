@@ -3,9 +3,11 @@ import { router } from 'expo-router';
 import { Text, View } from 'react-native';
 import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
+import { useOwnerAddress } from '../../hooks/useOwnerAddress';
 import { mockWallet } from './mock';
 
 export default function WalletScreen() {
+  const { address, error } = useOwnerAddress();
   return (
     <Screen>
       <View className="rounded-3xl bg-ink p-6 gap-3">
@@ -25,6 +27,20 @@ export default function WalletScreen() {
           before you can receive test tokens.
         </Text>
       </View>
+      <View className="bg-white border border-line rounded-3xl p-6 gap-3">
+        <Text className="text-lg font-semibold text-ink">Owner address</Text>
+        <Text selectable className="text-sm leading-5 text-muted">
+          {error ?? address ?? (address === undefined ? 'Loading…' : 'None')}
+        </Text>
+        <Text className="text-xs text-muted">
+          Public address of the signing key on this phone. Not the Safe address.
+        </Text>
+      </View>
+      <Button
+        label="Sign a test message"
+        secondary
+        onPress={() => router.push('/sign-test')}
+      />
       <Button
         label="Security & recovery"
         secondary
