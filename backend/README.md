@@ -1,7 +1,51 @@
-# FastAPI starter
+# Swissquote Self-Custody Wallet — Backend Service
 
-Voir [le démarrage](../docs/getting-started.md) pour l'installation, le serveur et les tests.
+> **BSA Hackathon — Swissquote Wallet Challenge**  
+> **Component:** Backend API (Python / FastAPI)  
+> **Status:** Prototype Implementation  
 
-Seul `GET /health` est implémenté. Les sous-modules de `app/` réservent les responsabilités prévues en section 10 du README. Les endpoints proposés restent à concevoir par l'équipe ; aucun faux statut d'approbation ou de transaction n'est livré. SQLite et les paramètres `.env` ne sont pas encore utilisés.
+---
 
-Ne stocker que des métadonnées publiques et des dossiers mockés. L'état final du compte Safe, des approbations et des transactions doit être vérifié on-chain. Aucune clé client dans l'API, les logs ou la BDD.
+## Overview
+
+This backend service acts as the simulated institutional core for Swissquote in the self-custody wallet prototype. It provides metadata tracking, identity-to-wallet linkage, and governance/guardian approval workflows for the Safe Smart Accounts. 
+
+*Note: The backend **never** handles, stores, or transmits user private keys. All cryptographic signing happens locally on the user's mobile device.*
+
+---
+
+## Tech Stack
+
+- **Language:** Python 3.11+
+- **Framework:** FastAPI
+- **Data Validation:** Pydantic
+- **Database:** SQLite (local prototype storage via SQLAlchemy)
+- **Server:** Uvicorn
+
+---
+
+## Implemented Features (Current Progress)
+
+1. **Health Check (`GET /health`)**
+   - Verifies the service status and ensures the API is running smoothly.
+2. **Wallet Registration (`POST /wallets/register`)**
+   - Receives and stores public metadata from the mobile application when a user creates or connects their wallet.
+   - Links a unique `user_id` to their `safe_address` (on-chain Safe smart account) and `owner_address` (client EOA signing key).
+3. **Wallet Retrieval (`GET /wallets/{user_id}`)**
+   - Fetches registered public wallet addresses for a given user.
+4. **Recovery Request (`POST /recovery/request`)**
+   - Registers a social recovery request when a user loses access to their device/key and requests institutional assistance.
+5. **Swissquote Guardian Approval (`POST /recovery/swissquote-approve`)**
+   - Simulates the institutional guardian's digital approval/signature required to reach the 2/3 threshold for account recovery.
+
+---
+
+## Project Structure
+
+```text
+backend/
+├── app/
+│   ├── __init__.py
+│   └── main.py          # FastAPI application, database models, and routes
+├── venv/                # Python virtual environment
+└── requirements.txt     # Python dependencies
