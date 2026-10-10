@@ -1,3 +1,4 @@
+# JavaScript dependencies, Expo output, and tooling caches
 node_modules/
 .expo/
 dist/
@@ -5,33 +6,70 @@ web-build/
 coverage/
 *.tsbuildinfo
 expo-env.d.ts
+.metro-health-check*
+
+# Local environment values; keep the shareable templates
 .env
 .env.*
 !.env.example
+
+# Python environments, build output, and tooling caches
 .venv/
 venv/
+build/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
 *.egg-info/
+
+# Prototype databases and runtime data
 backend/data/
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+*.sqlite3-journal
+
+# Generated native projects and signing credentials
 apps/mobile/ios/
 apps/mobile/android/
+.kotlin/
 *.jks
 *.keystore
 *.p8
 *.p12
+*.pfx
 *.pem
 *.key
 *.mobileprovision
+
+# Logs, OS files, and local editor settings
 *.log
 .DS_Store
+Thumbs.db
+Desktop.ini
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
+
+# Machine-local agent and cloud configuration
 .agents/
 .codex/
 .aws/
