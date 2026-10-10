@@ -306,6 +306,40 @@ def test_friend_sees_requests_for_safes_they_guard(client):
     assert other == {"requests": []}
 
 
+def test_guardian_lists_the_wallets_it_protects(client, fake):
+    invite = client.post(
+        "/guardians/invites",
+        json={"safe_address": SAFE, "owner_name": "Alice"},
+        headers=HEADERS,
+    ).json()
+    assert invite["from"] == "Alice"
+    message = routes.invite_message(SAFE, invite["invite_id"], FRIEND.address.lower())
+    client.post(
+        f"/guardians/invites/{invite['invite_id']}/accept",
+        json={
+            "guardian_address": FRIEND.address,
+            "signature": hexsig(FRIEND.sign_message(encode_defunct(text=message))),
+        },
+        headers=HEADERS,
+    )
+    wallets = client.get(f"/guardians/{FRIEND.address}/wallets", headers=HEADERS).json()
+    assert wallets["wallets"] == [
+        {
+            "safe_address": SAFE,
+            "from": "Alice",
+            "accepted_at": wallets["wallets"][0]["accepted_at"],
+            "active": True,
+        }
+    ]
+    fake.guardians = [BACKUP.address.lower(), SWISSQUOTE.address.lower()]
+    wallets = client.get(f"/guardians/{FRIEND.address}/wallets", headers=HEADERS).json()
+    assert wallets["wallets"][0]["active"] is False
+    other = client.get(f"/guardians/{BACKUP.address}/wallets", headers=HEADERS).json()
+    assert other == {"wallets": []}
+    bad = client.get("/guardians/not-an-address/wallets", headers=HEADERS)
+    assert bad.status_code == 422
+
+
 def test_cancelled_recovery_closes_the_request(client, fake):
     case = client.post(
         "/recovery/requests",

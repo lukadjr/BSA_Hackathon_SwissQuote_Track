@@ -16,6 +16,7 @@ import {
   readLastTransfer,
   transferActivity,
 } from '../../lib/safeWallet';
+import { recordSentTransfer } from '../../lib/activity';
 import { describeWalletError } from '../../lib/wallet';
 
 export default function SendScreen() {
@@ -40,6 +41,7 @@ export default function SendScreen() {
           if (focused.current) {
             setPendingTransfer(pending);
             setResult(last);
+            if (last) void recordSentTransfer(last);
           }
         })
         .catch((e: unknown) => {
@@ -89,6 +91,7 @@ export default function SendScreen() {
     const confirmed = await getSafeWallet().confirmTransfer(submitted);
     if (!focused.current) return;
     if (confirmed) {
+      void recordSentTransfer(confirmed);
       setResult(confirmed);
       setPreview(null);
       setPendingTransfer(null);

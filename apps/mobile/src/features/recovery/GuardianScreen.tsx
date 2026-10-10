@@ -8,7 +8,7 @@ import {
   type RecoveryApprovalPayload,
   type RecoveryRequestPayload,
 } from '@swissquote/wallet-core';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { isAddressEqual } from 'viem';
@@ -30,9 +30,32 @@ import {
   acceptGuardianInvite,
   addRecoveryApproval,
   listGuardianRequests,
+  listProtectedWallets,
   type GuardianRequest,
+  type ProtectedWallet,
 } from '../../lib/recoveryApi';
+import { Divider, ListRow, Section } from '../../components/ui';
 import { AddressLine, ErrorText, Words } from './parts';
+
+type Guarded = GuardedWallet & { active: boolean | null };
+
+/** This phone's list plus what Swissquote recorded (another phone, reinstall). */
+function mergeGuarded(
+  local: GuardedWallet[],
+  remote: ProtectedWallet[],
+): Guarded[] {
+  const bySafe = new Map<string, Guarded>();
+  for (const w of local)
+    bySafe.set(w.safe.toLowerCase(), { ...w, active: null });
+  for (const w of remote)
+    bySafe.set(w.safeAddress.toLowerCase(), {
+      safe: w.safeAddress,
+      from: w.from,
+      acceptedAt: w.acceptedAt ?? bySafe.get(w.safeAddress)?.acceptedAt ?? '',
+      active: w.active,
+    });
+  return [...bySafe.values()].filter((w) => w.active !== false);
+}
 
 type View_ =
   | { kind: 'home' }
@@ -47,12 +70,31 @@ type View_ =
   | { kind: 'approve'; payload: RecoveryRequestPayload }
   | { kind: 'approved'; payload: RecoveryApprovalPayload; sent: boolean };
 
-/** The friend's phone: accept invites and approve recoveries. */
+/** Standalone route (from the welcome screen, before any login). */
 export default function GuardianScreen() {
+  return (
+    <Screen
+      title="Be a guardian"
+      subtitle="Help a friend get their wallet back if they lose their phone."
+    >
+      <GuardianPanel
+        onAccepted={() => (router.canGoBack() ? router.back() : undefined)}
+      />
+    </Screen>
+  );
+}
+
+/** The friend's side: accept invites, list who I protect, approve recoveries. */
+export function GuardianPanel({
+  onAccepted,
+}: {
+  /** Called when the user closes the "you are now a guardian" result. */
+  onAccepted?: () => void;
+} = {}) {
   const [view, setView] = useState<View_>({ kind: 'home' });
   const [scanning, setScanning] = useState(false);
   const [guardian, setGuardian] = useState<Address | null>(null);
-  const [guarded, setGuarded] = useState<GuardedWallet[]>([]);
+  const [guarded, setGuarded] = useState<Guarded[]>([]);
   const [requests, setRequests] = useState<GuardianRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,7 +106,11 @@ export default function GuardianScreen() {
         const address = await getGuardianAddress();
         if (!active) return;
         setGuardian(address);
-        setGuarded(await listGuardedWallets());
+        const local = await listGuardedWallets();
+        const remote = address
+          ? await listProtectedWallets(address).catch(() => [])
+          : [];
+        setGuarded(mergeGuarded(local, remote));
         if (address)
           setRequests(
             (await listGuardianRequests(address).catch(() => [])).filter(
@@ -80,6 +126,9 @@ export default function GuardianScreen() {
       };
     }, []),
   );
+
+  const nameOf = (safe: Address) =>
+    guarded.find((w) => isAddressEqual(w.safe, safe))?.from ?? 'Your friend';
 
   function onScanned(text: string) {
     setScanning(false);
@@ -206,8 +255,7 @@ export default function GuardianScreen() {
   }
 
   return (
-    <Screen>
-      <Text className="text-2xl font-bold text-ink">Guardian</Text>
+    <>
       <QrScanner
         visible={scanning}
         title="Scan your friend's code"
@@ -219,62 +267,83 @@ export default function GuardianScreen() {
       {view.kind === 'home' && (
         <>
           <Card>
-            <Text className="text-base text-muted">
-              As a guardian you can help a friend get their wallet back if they
-              lose their phone. A recovery needs a second guardian. Any two
-              guardians can replace the owner after the waiting period.
-            </Text>
+            <ListRow
+              icon="qrcode.viewfinder"
+              tone="brand"
+              title="Scan a friend's code"
+              subtitle="An invite to become their guardian, or a recovery request"
+              onPress={() => setScanning(true)}
+            />
             {guardian ? (
               <Words address={guardian} caption="Your guardian key" />
             ) : (
-              <Text className="text-sm text-muted">
-                A guardian key is created on this phone when you accept your
-                first invite (Face ID).
+              <Text className="text-sm leading-5 text-muted">
+                A guardian key is created on this phone, behind Face ID, when
+                you accept your first invite. It can approve a recovery but can
+                never spend your friend&apos;s money.
               </Text>
             )}
-            <Button label="Scan a code" onPress={() => setScanning(true)} />
           </Card>
-          {requests.map((r) => (
-            <Card key={r.caseId} tone="alert">
-              <Text className="text-lg font-semibold text-ink">
-                Recovery request
-              </Text>
-              <Text className="text-base text-ink">
-                Wallet {shortAddress(r.safeAddress)} asks to move to the key{' '}
-                {shortAddress(r.newOwnerAddress)}.
-              </Text>
-              <Button
-                label="Review"
-                onPress={() =>
-                  setView({
-                    kind: 'approve',
-                    payload: {
-                      t: 'sqw-recovery-request',
-                      v: 1,
-                      chainId: SAFE_DEPLOYMENT.chainId,
-                      safe: r.safeAddress,
-                      module: r.module,
-                      newOwner: r.newOwnerAddress,
-                      nonce: r.nonce,
-                      case: r.caseId,
-                    },
-                  })
-                }
-              />
-            </Card>
-          ))}
-          {guarded.length > 0 && (
-            <Card>
-              <Text className="text-lg font-semibold text-ink">
-                You protect
-              </Text>
-              {guarded.map((w) => (
-                <Text key={w.safe} className="text-sm text-ink">
-                  {w.from} · {shortAddress(w.safe)}
-                </Text>
+          {requests.length > 0 && (
+            <Section title="Requests to review">
+              {requests.map((r, i) => (
+                <View key={r.caseId}>
+                  {i > 0 && <Divider />}
+                  <ListRow
+                    icon="exclamationmark.shield.fill"
+                    tone="brand"
+                    title={`${nameOf(r.safeAddress)} wants to recover`}
+                    subtitle={`New phone key ${shortAddress(r.newOwnerAddress)}`}
+                    onPress={() =>
+                      setView({
+                        kind: 'approve',
+                        payload: {
+                          t: 'sqw-recovery-request',
+                          v: 1,
+                          chainId: SAFE_DEPLOYMENT.chainId,
+                          safe: r.safeAddress,
+                          module: r.module,
+                          newOwner: r.newOwnerAddress,
+                          nonce: r.nonce,
+                          case: r.caseId,
+                        },
+                      })
+                    }
+                  />
+                </View>
               ))}
-            </Card>
+            </Section>
           )}
+          <Section title="People I protect">
+            {guarded.length === 0 ? (
+              <ListRow
+                icon="person.2"
+                title="Nobody yet"
+                subtitle="Scan a friend's invite to protect their wallet."
+              />
+            ) : (
+              guarded.map((w, i) => (
+                <View key={w.safe}>
+                  {i > 0 && <Divider />}
+                  <ListRow
+                    icon="person.fill"
+                    tone="success"
+                    title={w.from}
+                    subtitle={`Safe ${shortAddress(w.safe)}`}
+                    caption={
+                      requests.some((r) =>
+                        isAddressEqual(r.safeAddress, w.safe),
+                      )
+                        ? 'Request open'
+                        : w.active
+                          ? 'Protected'
+                          : 'Accepted'
+                    }
+                  />
+                </View>
+              ))
+            )}
+          </Section>
         </>
       )}
 
@@ -319,10 +388,16 @@ export default function GuardianScreen() {
                 Swissquote could not be reached. On their phone, {view.from}{' '}
                 taps “Scan my friend’s code” and scans this:
               </Text>
-              <QrCode value={JSON.stringify(view.offline)} />
+              <QrCode shareable value={JSON.stringify(view.offline)} />
             </>
           )}
-          <Button label="Done" onPress={() => setView({ kind: 'home' })} />
+          <Button
+            label="Done"
+            onPress={() => {
+              setView({ kind: 'home' });
+              onAccepted?.();
+            }}
+          />
         </Card>
       )}
 
@@ -364,11 +439,10 @@ export default function GuardianScreen() {
               ? 'Sent to Swissquote. Your friend’s phone will pick it up.'
               : 'Swissquote is not reachable. Let your friend scan this code with their new phone.'}
           </Text>
-          <QrCode value={JSON.stringify(view.payload)} />
+          <QrCode shareable value={JSON.stringify(view.payload)} />
           <Button label="Done" onPress={() => setView({ kind: 'home' })} />
         </Card>
       )}
-      <View className="h-4" />
-    </Screen>
+    </>
   );
 }

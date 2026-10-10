@@ -43,6 +43,7 @@ export interface FundingIntent {
     | 'recovery_2_of_3_demo_three_minutes';
   message: string;
   expires_at: string;
+  created_at?: string | null;
   status:
     | 'awaiting_confirmation'
     | 'queued'

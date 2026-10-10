@@ -14,47 +14,65 @@ export default function RootLayout() {
           headerStyle: { backgroundColor: colors.canvas },
           headerTintColor: colors.ink,
           headerShadowVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
+          headerTitleStyle: { fontWeight: '700' },
           contentStyle: { backgroundColor: colors.canvas },
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen
-          name="login"
-          options={{ title: 'Swissquote', headerBackVisible: false }}
+          name="welcome"
+          options={{ headerShown: false, animation: 'fade' }}
         />
+        <Stack.Screen name="login" options={{ title: '' }} />
         <Stack.Screen
-          name="create-wallet"
-          options={{ title: 'Create wallet', headerBackVisible: false }}
+          name="start"
+          options={{ title: '', headerBackVisible: false }}
         />
+        <Stack.Screen name="kyc" options={{ title: 'Identity check' }} />
         <Stack.Screen
-          name="link-wallet"
+          name="setup"
           options={{
-            title: 'Link wallet',
+            title: 'Your wallet',
             headerBackVisible: false,
             gestureEnabled: false,
           }}
         />
         <Stack.Screen
-          name="bank-link"
-          options={{ title: 'Bank connection · demo' }}
+          name="protect"
+          options={{ title: 'Trusted guardians', gestureEnabled: false }}
         />
-        <Stack.Screen name="wallet" options={{ title: 'Your wallet' }} />
+        <Stack.Screen
+          name="(tabs)"
+          options={{ headerShown: false, animation: 'fade' }}
+        />
         <Stack.Screen
           name="add-money"
-          options={{ title: 'Add money · demo' }}
+          options={{ title: 'Add money', presentation: 'modal' }}
         />
-        <Stack.Screen name="send" options={{ title: 'Send' }} />
+        <Stack.Screen
+          name="send"
+          options={{ title: 'Send', presentation: 'modal' }}
+        />
+        <Stack.Screen
+          name="receive"
+          options={{ title: 'Receive', presentation: 'modal' }}
+        />
+        <Stack.Screen name="profile" options={{ title: 'Profile' }} />
+        <Stack.Screen
+          name="link-wallet"
+          options={{ title: 'Swissquote link' }}
+        />
+        <Stack.Screen name="bank-link" options={{ title: 'Bank connection' }} />
         <Stack.Screen name="sign-test" options={{ title: 'Sign test' }} />
-        <Stack.Screen name="recovery" options={{ title: 'Security' }} />
-        <Stack.Screen name="protect" options={{ title: 'Protect wallet' }} />
         <Stack.Screen
           name="replace-guardian"
           options={{ title: 'Replace guardian' }}
         />
-        <Stack.Screen name="guardian" options={{ title: 'Be a guardian' }} />
+        <Stack.Screen name="guardian" options={{ title: 'Guardian' }} />
         <Stack.Screen
           name="recover"
-          options={{ title: 'Recover wallet', headerBackVisible: false }}
+          options={{ title: 'Recover wallet', gestureEnabled: false }}
         />
       </Stack>
     </SafeAreaProvider>

@@ -1,35 +1,110 @@
-import { router } from 'expo-router';
-import { Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
-import { Screen } from '../../components/Screen';
+import { Icon } from '../../components/Icon';
+import { IconTile, Wordmark } from '../../components/ui';
+import { getGuardianAddress, listGuardedWallets } from '../../lib/guardianKey';
+import { listGuardianRequests } from '../../lib/recoveryApi';
+import { colors } from '../../theme/colors';
 
+/** First screen: log in with Swissquote, or help a friend as a guardian. */
 export default function WelcomeScreen() {
+  const [guardian, setGuardian] = useState<{
+    wallets: number;
+    requests: number;
+  } | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        const address = await getGuardianAddress();
+        if (!address) return null;
+        const [wallets, requests] = await Promise.all([
+          listGuardedWallets(),
+          listGuardianRequests(address).catch(() => []),
+        ]);
+        return {
+          wallets: wallets.length,
+          requests: requests.filter((r) => !r.approvedByYou).length,
+        };
+      })()
+        .then((value) => active && setGuardian(value))
+        .catch(() => active && setGuardian(null));
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+
   return (
-    <Screen>
-      <View className="py-8 gap-5">
-        <Text className="text-accent text-sm font-bold tracking-widest">
-          SWISSQUOTE
+    <View className="flex-1 bg-brand">
+      <SafeAreaView edges={['top']} className="flex-1 justify-between px-6">
+        <View className="pt-4">
+          <Wordmark light />
+        </View>
+        <View className="gap-4 pb-10">
+          <Text className="text-5xl font-extrabold leading-tight text-white">
+            Your keys.{'\n'}Your crypto.
+          </Text>
+          <Text className="text-lg leading-7 text-white/90">
+            A self-custody wallet with Swissquote by your side. Lose your phone,
+            not your money.
+          </Text>
+        </View>
+      </SafeAreaView>
+      <SafeAreaView
+        edges={['bottom']}
+        className="gap-3 rounded-t-[32px] bg-canvas px-6 pt-6"
+      >
+        {guardian && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="People I protect"
+            onPress={() => router.push('/guardian')}
+            className="flex-row items-center gap-3 rounded-3xl bg-card p-4 active:opacity-70"
+          >
+            <IconTile
+              name="person.2.fill"
+              tone={guardian.requests > 0 ? 'brand' : 'success'}
+            />
+            <View className="flex-1">
+              <Text className="text-base font-semibold text-ink">
+                People I protect
+              </Text>
+              <Text className="text-sm text-muted">
+                {guardian.requests > 0
+                  ? `${guardian.requests} recovery request${guardian.requests > 1 ? 's' : ''} to review`
+                  : `${guardian.wallets} wallet${guardian.wallets === 1 ? '' : 's'} · nothing to do`}
+              </Text>
+            </View>
+            {guardian.requests > 0 && (
+              <View className="h-6 min-w-6 items-center justify-center rounded-full bg-brand px-2">
+                <Text className="text-xs font-bold text-white">
+                  {guardian.requests}
+                </Text>
+              </View>
+            )}
+            <Icon name="chevron.right" size={14} color={colors.faint} />
+          </Pressable>
+        )}
+        <Button
+          label="Log in with Swissquote"
+          icon="person.crop.circle.fill"
+          onPress={() => router.push('/login')}
+        />
+        <Button
+          label="Be a guardian"
+          variant="secondary"
+          icon="shield.lefthalf.filled"
+          onPress={() => router.push('/guardian')}
+        />
+        <Text className="pb-2 text-center text-xs text-muted">
+          Demo on the Sepolia testnet · no real funds
         </Text>
-        <Text className="text-4xl font-bold text-ink">
-          Your keys.{'\n'}Your crypto.
-        </Text>
-        <Text className="text-lg text-muted">Swissquote by your side.</Text>
-      </View>
-      <View className="bg-white border border-line rounded-3xl p-6 gap-3">
-        <Text className="text-xl font-semibold text-ink">
-          A simple place to start
-        </Text>
-        <Text className="text-base leading-6 text-muted">
-          Explore a sample wallet and the first screens of your mobile app. All
-          balances are fictional. No wallet or keys are created.
-        </Text>
-      </View>
-      <Button label="Open demo wallet" onPress={() => router.push('/wallet')} />
-      <Button
-        label="Explore recovery"
-        secondary
-        onPress={() => router.push('/recovery')}
-      />
-    </Screen>
+      </SafeAreaView>
+    </View>
   );
 }

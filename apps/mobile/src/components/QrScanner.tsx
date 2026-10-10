@@ -29,12 +29,12 @@ export function QrScanner(props: Props) {
         animationType="slide"
         onRequestClose={props.onClose}
       >
-        <SafeAreaView className="flex-1 bg-ink p-6 gap-4 justify-center">
+        <SafeAreaView className="flex-1 justify-center gap-4 bg-ink p-6">
           <Text className="text-base text-white">
-            This build has no camera module. Rebuild the app (npx expo run:ios)
-            to scan QR codes.
+            The camera is not available in this build. Paste the code your
+            friend shared as text.
           </Text>
-          {__DEV__ && <DevPasteFallback onScanned={props.onScanned} />}
+          <PasteFallback onScanned={props.onScanned} />
           <Button label="Close" secondary onPress={props.onClose} />
         </SafeAreaView>
       </Modal>
@@ -87,15 +87,13 @@ function CameraScanner({
             />
           </View>
         )}
-        {__DEV__ && (
-          <DevPasteFallback
-            onScanned={(text) => {
-              if (done.current) return;
-              done.current = true;
-              onScanned(text);
-            }}
-          />
-        )}
+        <PasteFallback
+          onScanned={(text) => {
+            if (done.current) return;
+            done.current = true;
+            onScanned(text);
+          }}
+        />
         <Button label="Cancel" secondary onPress={onClose} />
       </SafeAreaView>
     </Modal>
@@ -103,28 +101,25 @@ function CameraScanner({
 }
 
 /**
- * Development only: simulators have no camera. Paste the QR text that the
- * other device logs to Metro ("[dev] QR content: ...") instead of scanning.
+ * Text fallback when the camera cannot be used (simulators, broken camera):
+ * the other phone can share its code as text ("Share as text" under the QR).
  */
-function DevPasteFallback({
-  onScanned,
-}: {
-  onScanned: (text: string) => void;
-}) {
+function PasteFallback({ onScanned }: { onScanned: (text: string) => void }) {
   const [text, setText] = useState('');
   return (
     <View className="gap-2">
       <TextInput
-        accessibilityLabel="Paste QR content (dev)"
-        className="bg-white rounded-xl px-4 py-3 text-ink"
-        placeholder="Dev: paste QR content"
+        accessibilityLabel="Paste the code as text"
+        className="rounded-2xl bg-white px-4 py-3 text-ink"
+        placeholder="Or paste the code as text"
+        placeholderTextColor="#8A8A94"
         autoCapitalize="none"
         autoCorrect={false}
         value={text}
         onChangeText={setText}
       />
       <Button
-        label="Use pasted code (dev)"
+        label="Use this code"
         secondary
         disabled={!text.trim()}
         onPress={() => onScanned(text.trim())}

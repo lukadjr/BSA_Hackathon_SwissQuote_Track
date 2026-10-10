@@ -55,6 +55,14 @@ class GuardianInviteDB(Base):
     accepted_at = Column(DateTime)
 
 
+class InviteOwnerNameDB(Base):
+    """Display name the owner chose at demo login, shown to the friend's phone."""
+
+    __tablename__ = "guardian_invite_owner_names"
+    invite_id = Column(String, primary_key=True)
+    owner_name = Column(String, nullable=False)
+
+
 class RecoveryCaseDB(Base):
     __tablename__ = "recovery_cases"
     id = Column(String, primary_key=True)
@@ -227,6 +235,14 @@ def swissquote_guardian(user: Annotated[str, Depends(current_user)]):
 
 class InviteRequest(StrictRequest):
     safe_address: Address
+    owner_name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=64)] | None = (
+        None
+    )
+
+
+def owner_name(db: Session, invite: GuardianInviteDB) -> str:
+    row = db.get(InviteOwnerNameDB, invite.id)
+    return row.owner_name if row and row.owner_name else invite.user_id
 
 
 @router.post("/guardians/invites")
@@ -243,11 +259,13 @@ def create_invite(
         expires_at=utcnow() + INVITE_TTL,
     )
     db.add(invite)
+    if req.owner_name:
+        db.add(InviteOwnerNameDB(invite_id=invite.id, owner_name=req.owner_name))
     db.commit()
     return {
         "invite_id": invite.id,
         "safe_address": invite.safe_address,
-        "from": user,
+        "from": owner_name(db, invite),
         "expires_at": iso(invite.expires_at),
     }
 
@@ -354,6 +372,44 @@ def guardian_requests(
             {**case_summary(case), "approved_by_you": case.id in approved} for case in cases
         ]
     }
+
+
+@router.get("/guardians/{guardian_address}/wallets")
+def guarded_wallets(
+    guardian_address: str,
+    user: Annotated[str, Depends(current_user)],
+    db: Session = Depends(get_db),
+):
+    """The Safes this guardian key accepted to protect (public data only).
+
+    `active` says whether the key is still a guardian on-chain; it is null when
+    the chain cannot be read, so the phone can still list what it accepted.
+    """
+    guardian = guardian_address.lower()
+    if not re.fullmatch(r"0x[0-9a-f]{40}", guardian):
+        raise HTTPException(status_code=422, detail="Invalid guardian address")
+    invites = (
+        db.query(GuardianInviteDB)
+        .filter_by(guardian_address=guardian)
+        .order_by(GuardianInviteDB.accepted_at.desc())
+        .all()
+    )
+    wallets: dict[str, dict] = {}
+    for invite in invites:
+        if invite.safe_address in wallets:
+            continue  # the newest acceptance wins
+        try:
+            state = chain.recovery_state(invite.safe_address)
+            active = state is not None and guardian in state.guardians
+        except chain.ChainError:
+            active = None
+        wallets[invite.safe_address] = {
+            "safe_address": invite.safe_address,
+            "from": owner_name(db, invite),
+            "accepted_at": iso(invite.accepted_at),
+            "active": active,
+        }
+    return {"wallets": list(wallets.values())}
 
 
 # ---------------------------------------------------------------- recovery cases

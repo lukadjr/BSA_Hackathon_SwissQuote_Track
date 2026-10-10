@@ -1,10 +1,11 @@
-import { shortAddress, type Address } from '@swissquote/wallet-core';
-import { router } from 'expo-router';
+import { type Address } from '@swissquote/wallet-core';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
+import { ListRow, Steps } from '../../components/ui';
 import {
   describeError,
   periodLabel,
@@ -23,8 +24,13 @@ import {
 
 type Step = 'intro' | 'backup' | 'friend' | 'review' | 'done';
 
-/** Owner phone: backup phrase + Swissquote + friend → one Safe operation. */
+/**
+ * Owner phone: the three trusted guardians (backup phrase, Swissquote, a
+ * friend) written to the Safe in one operation. Any 2 of 3 can recover.
+ */
 export default function ProtectScreen() {
+  const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
+  const inOnboarding = onboarding === '1';
   const [step, setStep] = useState<Step>('intro');
   const [safe, setSafe] = useState<Address | null>(null);
   const [backup, setBackup] = useState<Address | null>(null);
@@ -47,7 +53,7 @@ export default function ProtectScreen() {
           return;
         }
         if (state.recovery) {
-          router.replace('/recovery');
+          setStep('done');
           return;
         }
         setSafe(state.safeAddress);
@@ -72,55 +78,83 @@ export default function ProtectScreen() {
     [backup, friend, swissquote],
   );
 
+  const leave = () => (inOnboarding ? router.replace('/home') : router.back());
+  const progress = { intro: 0, backup: 1, friend: 2, review: 3, done: 4 }[step];
+
   return (
-    <Screen>
-      <Text className="text-2xl font-bold text-ink">Protect your wallet</Text>
-      {error && (
-        <Card>
-          <ErrorText error={error} />
-        </Card>
-      )}
+    <Screen
+      footer={
+        step === 'intro' && safe ? (
+          <>
+            <Button label="Start" onPress={() => setStep('backup')} />
+            <Button label="Set up later" variant="ghost" onPress={leave} />
+          </>
+        ) : step === 'done' ? (
+          <Button
+            label={inOnboarding ? 'Open my wallet' : 'Done'}
+            onPress={() =>
+              inOnboarding ? router.replace('/home') : router.back()
+            }
+          />
+        ) : undefined
+      }
+    >
+      <Stack.Screen options={{ headerBackVisible: !inOnboarding }} />
+      {inOnboarding && <Steps current={3} total={3} />}
+      {!inOnboarding && <Steps current={progress} total={4} />}
+      <View className="gap-1 py-2">
+        <Text className="text-3xl font-bold text-ink">
+          {step === 'done' ? 'Your wallet is protected' : 'Trusted guardians'}
+        </Text>
+        <Text className="text-base leading-6 text-muted">
+          {step === 'done'
+            ? `Any 2 of your 3 guardians can move your wallet to a new phone, after ${periodLabel()}.`
+            : 'If you lose this phone, any 2 of these 3 guardians bring your wallet back.'}
+        </Text>
+      </View>
+      <ErrorText error={error} />
       {notDeployed && (
-        <Card>
-          <Text className="text-lg font-semibold text-ink">
-            Your Safe is not deployed yet
-          </Text>
-          <Text className="text-base text-muted">
-            Recovery guardians are stored in your Safe on Sepolia. Add money
-            once from the demo bank: Swissquote then deploys your Safe, and you
-            can come back here to add guardians.
+        <Card tone="warn">
+          <Text className="text-base text-ink">
+            Your Safe is not deployed yet. Finish the wallet setup first.
           </Text>
           <Button
-            label="Add money"
-            onPress={() => router.replace('/add-money')}
+            label="Finish setup"
+            onPress={() => router.replace('/setup')}
           />
-          <Button label="Back" secondary onPress={() => router.back()} />
         </Card>
       )}
-      {!safe && !error && !notDeployed && <ActivityIndicator />}
+      {!safe && !error && !notDeployed && step !== 'done' && (
+        <ActivityIndicator />
+      )}
       {safe && step === 'intro' && (
-        <Card>
-          <Text className="text-base text-muted">
-            If you lose this phone, any 2 of these 3 guardians can move your
-            Safe to a new phone key:
-          </Text>
-          <Text className="text-base text-ink">
-            1. Your backup phrase (12 words on paper)
-          </Text>
-          <Text className="text-base text-ink">
-            2. Swissquote, after an identity check
-          </Text>
-          <Text className="text-base text-ink">
-            3. A trusted friend, with their own app
-          </Text>
-          <Text className="text-base text-muted">
+        <>
+          <Card>
+            <ListRow
+              icon="doc.text.fill"
+              tone="neutral"
+              title="Your backup phrase"
+              subtitle="12 words on paper, kept away from this phone"
+            />
+            <ListRow
+              icon="building.columns.fill"
+              tone="brand"
+              title="Swissquote"
+              subtitle="Approves after checking your identity"
+            />
+            <ListRow
+              icon="person.fill"
+              tone="success"
+              title="A trusted friend"
+              subtitle="Approves from their own Swissquote Wallet app"
+            />
+          </Card>
+          <Text className="px-1 text-sm leading-5 text-muted">
             A recovery only takes effect after {periodLabel()}. During that time
-            this phone gets an alert and can cancel it. Guardians cannot spend
-            directly, but any two can replace the owner after the waiting
-            period.
+            this phone is alerted and can cancel it. Guardians can never spend
+            your money.
           </Text>
-          <Button label="Start" onPress={() => setStep('backup')} />
-        </Card>
+        </>
       )}
       {safe && step === 'backup' && (
         <BackupPhraseSteps
@@ -171,18 +205,14 @@ export default function ProtectScreen() {
       )}
       {step === 'done' && (
         <Card tone="ok">
-          <Text className="text-lg font-semibold text-ink">
-            Your wallet is protected
-          </Text>
-          <Text className="text-base text-muted">
-            The change is confirmed on Sepolia: 3 guardians, any 2 can recover,
-            after {periodLabel()}. Keep your paper with the 12 words for backup{' '}
-            {backup ? shortAddress(backup) : ''} safe.
-          </Text>
-          <Button label="Done" onPress={() => router.replace('/recovery')} />
+          <ListRow
+            icon="checkmark.shield.fill"
+            tone="success"
+            title="Recovery is active on Sepolia"
+            subtitle="Keep your paper with the 12 words somewhere safe."
+          />
         </Card>
       )}
-      <View className="h-4" />
     </Screen>
   );
 }

@@ -44,6 +44,7 @@ import {
   type RecoveryCase,
 } from '../../lib/recoveryApi';
 import { createWallet, getAddress as getOwnerAddress } from '../../lib/wallet';
+import { Steps } from '../../components/ui';
 import { AddressLine, ErrorText, Words } from './parts';
 
 type Chain = { state: RecoveryState; owners: Address[]; now: number };
@@ -183,12 +184,15 @@ export default function RecoverScreen() {
     if (swissquote)
       await saveGuardianLabels({ [swissquote]: 'swissquote' }).catch(() => {});
     await savePendingRecovery(null);
-    router.replace('/link-wallet');
+    // Re-link the recovered Safe to Swissquote, then open the wallet.
+    router.replace('/setup');
   }
 
   return (
-    <Screen>
-      <Text className="text-2xl font-bold text-ink">Recover your wallet</Text>
+    <Screen
+      title="Recover your wallet"
+      subtitle="Any 2 of your 3 guardians bring your wallet to this phone."
+    >
       <Card>
         <AddressLine label="Wallet (Safe)" address={pending.safe} />
         <Words
@@ -312,8 +316,10 @@ function StartRecovery({
       .catch(() => {}); // Swissquote offline: the user types the Safe address
   }, []);
   return (
-    <Screen>
-      <Text className="text-2xl font-bold text-ink">Recover your wallet</Text>
+    <Screen
+      title="Recover your wallet"
+      subtitle="Any 2 of your 3 guardians bring your wallet to this phone."
+    >
       <Card>
         <Text className="text-base text-muted">
           Lost your phone? This phone gets a new key. Then 2 of your 3 guardians
@@ -327,7 +333,7 @@ function StartRecovery({
           autoCapitalize="none"
           autoCorrect={false}
           placeholder="0x…"
-          className="rounded-xl border border-line bg-white px-3 py-3 text-sm text-ink"
+          className="rounded-2xl bg-canvas px-4 py-3 text-sm text-ink"
         />
         <ErrorText error={error} />
         <Button
@@ -357,6 +363,9 @@ function StartRecovery({
               } catch {
                 caseId = null; // Swissquote offline: backup + friend still work
               }
+              // Demo: logging in to Swissquote is the identity check, so
+              // Swissquote approves as a guardian right away (best effort).
+              if (caseId) await askSwissquoteApproval(caseId).catch(() => {});
               const local: PendingRecoveryLocal = {
                 safe: safeAddress,
                 module: state.module,
@@ -426,6 +435,10 @@ function Approvals({
         <Text className="text-lg font-semibold text-ink">
           Approvals: {approvals.length} of {threshold}
         </Text>
+        <Steps
+          current={Math.min(approvals.length, threshold)}
+          total={threshold}
+        />
         {approvals.map((a) => (
           <Text key={a.guardian} className="text-sm text-ink">
             ✓{' '}
@@ -452,7 +465,7 @@ function Approvals({
                   autoCorrect={false}
                   secureTextEntry={false}
                   placeholder="12 words separated by spaces"
-                  className="min-h-24 rounded-xl border border-line bg-white px-3 py-3 text-base text-ink"
+                  className="min-h-24 rounded-2xl bg-canvas px-4 py-3 text-base text-ink"
                 />
                 <Button
                   label={busy ? 'Signing…' : 'Approve with my phrase'}
@@ -521,7 +534,7 @@ function Approvals({
               compares the 4 words above with you by phone.
             </Text>
             {showFriendQr ? (
-              <QrCode value={JSON.stringify(request)} />
+              <QrCode shareable value={JSON.stringify(request)} />
             ) : (
               <Button
                 label="Show code for my friend"

@@ -3,12 +3,14 @@ import { useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
+import { ErrorText, Wordmark } from '../../components/ui';
 import { loginToDemo } from '../../lib/auth';
 import { readPendingRecovery } from '../../lib/recovery';
 import { describeWalletError, getAddress } from '../../lib/wallet';
+import { colors } from '../../theme/colors';
 
 export default function LoginScreen() {
-  const [username, setUsername] = useState('demo-user');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,15 +19,11 @@ export default function LoginScreen() {
   async function onLogin() {
     setBusy(true);
     setError(null);
-
     try {
       await loginToDemo(username.trim(), password);
       setPassword('');
-
-      // Check wallet state to navigate to the appropriate step
-      const address = await getAddress();
       if (await readPendingRecovery()) router.replace('/recover');
-      else router.replace(address ? '/wallet' : '/create-wallet');
+      else router.replace((await getAddress()) ? '/home' : '/start');
     } catch (e) {
       setError(describeWalletError(e));
       setBusy(false);
@@ -33,88 +31,79 @@ export default function LoginScreen() {
   }
 
   return (
-    <Screen>
-      <View className="py-6 gap-3">
-        <Text className="text-accent text-sm font-bold tracking-widest">
-          SWISSQUOTE
-        </Text>
-        <Text className="text-3xl font-bold text-ink">
-          Log in to your account
-        </Text>
-        <Text className="text-base text-muted">
-          Demo login: any username and any password are accepted. Nothing is
-          checked and no real banking password should be entered.
+    <Screen
+      footer={
+        <Button
+          label="Log in"
+          busy={busy}
+          onPress={() => {
+            if (!busy) void onLogin();
+          }}
+        />
+      }
+    >
+      <View className="gap-3 pb-4">
+        <Wordmark />
+        <Text className="pt-4 text-3xl font-bold text-ink">Welcome back</Text>
+        <Text className="text-base leading-6 text-muted">
+          Log in with your Swissquote account. For this demo any username and
+          password work; nothing is checked or stored.
         </Text>
       </View>
-
-      <View className="bg-white border border-line rounded-3xl p-6 gap-4 mb-4">
-        <View className="gap-1">
-          <Text className="text-xs font-semibold text-muted uppercase">
-            Username / Client ID
-          </Text>
-          <TextInput
-            className="border border-line rounded-xl px-4 py-3 text-ink text-base bg-canvas"
-            placeholder="e.g. demo-user"
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
-
-        <View className="gap-1">
-          <Text className="text-xs font-semibold text-muted uppercase">
-            Password
-          </Text>
-          <TextInput
-            className="border border-line rounded-xl px-4 py-3 text-ink text-base bg-canvas"
-            placeholder="Any value (demo)"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-        </View>
+      <View className="gap-3">
+        <Field
+          label="Username"
+          value={username}
+          onChangeText={setUsername}
+          placeholder="e.g. alice"
+        />
+        <Field
+          label="Password"
+          value={password}
+          onChangeText={setPassword}
+          placeholder="Any password"
+          secure
+          onSubmit={() => !busy && void onLogin()}
+        />
       </View>
-
-      {error !== null && (
-        <Text className="text-base text-accent mb-4">{error}</Text>
-      )}
-
-      <Button
-        label="Open wallet without bank login"
-        secondary
-        disabled={busy}
-        onPress={() => {
-          getAddress()
-            .then((address) => {
-              if (address) router.replace('/wallet');
-              else
-                setError(
-                  'No wallet on this phone yet. Log in to create one, or recover an existing wallet.',
-                );
-            })
-            .catch((e) => setError(describeWalletError(e)));
-        }}
-      />
-      <Button
-        label="Recover my wallet"
-        secondary
-        disabled={busy}
-        onPress={() => router.push('/recover')}
-      />
-      <Button
-        label="Help a friend: be a guardian"
-        secondary
-        disabled={busy}
-        onPress={() => router.push('/guardian')}
-      />
-      <Button
-        disabled={busy}
-        label={busy ? 'Connecting…' : 'Log in'}
-        onPress={() => {
-          if (!busy) void onLogin();
-        }}
-      />
+      <ErrorText error={error} />
     </Screen>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  secure = false,
+  onSubmit,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (v: string) => void;
+  placeholder: string;
+  secure?: boolean;
+  onSubmit?: () => void;
+}) {
+  return (
+    <View className="gap-1 rounded-2xl bg-card px-4 py-3">
+      <Text className="text-xs font-semibold uppercase text-muted">
+        {label}
+      </Text>
+      <TextInput
+        accessibilityLabel={label}
+        className="py-1 text-lg text-ink"
+        placeholder={placeholder}
+        placeholderTextColor={colors.faint}
+        value={value}
+        onChangeText={onChangeText}
+        autoCapitalize="none"
+        autoCorrect={false}
+        secureTextEntry={secure}
+        returnKeyType={onSubmit ? 'go' : 'next'}
+        onSubmitEditing={onSubmit}
+      />
+    </View>
   );
 }

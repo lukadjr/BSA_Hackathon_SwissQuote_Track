@@ -1,14 +1,18 @@
 import qrcode from 'qrcode-generator';
 import { useEffect, useMemo } from 'react';
-import { View } from 'react-native';
+import { Share, View } from 'react-native';
+import { Button } from './Button';
 
 /** Pure-JS QR code drawn with Views (no native module). */
 export function QrCode({
   value,
   size = 260,
+  shareable = false,
 }: {
   value: string;
   size?: number;
+  /** Adds "Share as text": the fallback when the other phone cannot scan. */
+  shareable?: boolean;
 }) {
   useEffect(() => {
     // Development only: simulators have no camera, so the paired simulator
@@ -36,7 +40,7 @@ export function QrCode({
   const quiet = 4;
   const cell = Math.floor(size / (rows.count + quiet * 2));
   const inner = cell * rows.count;
-  return (
+  const code = (
     <View
       accessibilityLabel="QR code"
       style={{
@@ -63,6 +67,18 @@ export function QrCode({
           )),
         )}
       </View>
+    </View>
+  );
+  if (!shareable) return code;
+  return (
+    <View className="gap-3">
+      {code}
+      <Button
+        label="Share as text"
+        variant="ghost"
+        icon="square.and.arrow.up"
+        onPress={() => void Share.share({ message: value }).catch(() => {})}
+      />
     </View>
   );
 }

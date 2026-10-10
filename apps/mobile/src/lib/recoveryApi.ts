@@ -93,13 +93,20 @@ export async function getMyWallet(signal?: AbortSignal) {
 export async function createGuardianInvite(
   safe: Address,
   signal?: AbortSignal,
+  ownerName?: string,
 ) {
   const data = await request<{
     invite_id: string;
     safe_address: Address;
     from: string;
     expires_at: string;
-  }>('/guardians/invites', { safe_address: safe }, signal);
+  }>(
+    '/guardians/invites',
+    ownerName?.trim()
+      ? { safe_address: safe, owner_name: ownerName.trim().slice(0, 64) }
+      : { safe_address: safe },
+    signal,
+  );
   return {
     inviteId: data.invite_id,
     safeAddress: data.safe_address,
@@ -158,6 +165,35 @@ export async function listGuardianRequests(
     newOwnerAddress: r.new_owner_address,
     nonce: r.nonce,
     approvedByYou: r.approved_by_you,
+  }));
+}
+
+export interface ProtectedWallet {
+  safeAddress: Address;
+  from: string;
+  acceptedAt: string | null;
+  /** Still a guardian on-chain; null when Swissquote could not read the chain. */
+  active: boolean | null;
+}
+
+/** Wallets this guardian key accepted to protect, as Swissquote recorded them. */
+export async function listProtectedWallets(
+  guardian: Address,
+  signal?: AbortSignal,
+): Promise<ProtectedWallet[]> {
+  const data = await request<{
+    wallets: {
+      safe_address: Address;
+      from: string;
+      accepted_at: string | null;
+      active: boolean | null;
+    }[];
+  }>(`/guardians/${guardian.toLowerCase()}/wallets`, undefined, signal, 'GET');
+  return data.wallets.map((w) => ({
+    safeAddress: w.safe_address,
+    from: w.from,
+    acceptedAt: w.accepted_at,
+    active: w.active,
   }));
 }
 

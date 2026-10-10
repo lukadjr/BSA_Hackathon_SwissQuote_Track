@@ -103,6 +103,7 @@ def response(intent):
         "domain": intent.domain,
         "message": intent.message,
         "expires_at": bank.timestamp(intent.expires_at),
+        "created_at": bank.timestamp(intent.created_at),
         "status": intent.status,
         "transaction_hash": intent.transaction_hash,
         "receipt_block": intent.receipt_block,

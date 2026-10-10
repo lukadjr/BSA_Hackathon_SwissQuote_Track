@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   AppState,
   Linking,
+  Pressable,
   Text,
   TextInput,
   View,
@@ -14,7 +15,7 @@ import type { SafeAccountInfo } from '@swissquote/wallet-core';
 import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
 import { getClientIdentity, getLinkStatus } from '../../lib/api';
-import { getSafeAccount } from '../../lib/safeWallet';
+import { getSafeAccount, getSafeWallet } from '../../lib/safeWallet';
 import {
   confirmFunding,
   describeFundingError,
@@ -32,6 +33,7 @@ export default function AddMoneyScreen() {
   const [treasury, setTreasury] = useState<TreasuryAccount | null>(null);
   const [safe, setSafe] = useState<SafeAccountInfo | null>(null);
   const [linked, setLinked] = useState(false);
+  const [isProtected, setProtected] = useState<boolean | null>(null);
   const [amount, setAmount] = useState('');
   const [intent, setIntent] = useState<FundingIntent | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,13 +44,18 @@ export default function AddMoneyScreen() {
   const creation = useRef<{ fingerprint: string; key: string } | null>(null);
 
   const load = useCallback(async (signal: AbortSignal) => {
-    const [profile, account, bank, history, link] = await Promise.all([
-      getClientIdentity(signal),
-      getSafeAccount(),
-      getTreasuryAccount(signal),
-      listFunding(signal),
-      getLinkStatus(signal),
-    ]);
+    const [profile, account, bank, history, link, security] = await Promise.all(
+      [
+        getClientIdentity(signal),
+        getSafeAccount(),
+        getTreasuryAccount(signal),
+        listFunding(signal),
+        getLinkStatus(signal),
+        getSafeWallet()
+          .getSecurityState()
+          .catch(() => null),
+      ],
+    );
     if (signal.aborted) return;
     const latest = history.intents.find(
       (i) =>
@@ -64,6 +71,7 @@ export default function AddMoneyScreen() {
         bank,
       );
     setTreasury(bank);
+    setProtected(security ? security.recovery !== null : null);
     setSafe(account);
     setLinked(
       link.bank_transfers_allowed &&
@@ -164,7 +172,6 @@ export default function AddMoneyScreen() {
   const active = intent !== null && isActiveFunding(intent);
   return (
     <Screen>
-      <Text className="text-2xl font-bold text-ink">Add money</Text>
       <Text className="text-base text-muted">
         Transfer test tokens from your Swissquote demo account into your own
         wallet. Bank identity and compliance checks are simulated. Transfers are
@@ -211,7 +218,7 @@ export default function AddMoneyScreen() {
           </Text>
         </View>
       )}
-      {safe && safe.deployed && !active && (
+      {safe && safe.deployed && !active && isProtected === false && (
         <Button
           label="Protect wallet before adding money"
           secondary
@@ -237,6 +244,24 @@ export default function AddMoneyScreen() {
           <Text className="text-base font-semibold text-ink">
             Amount in test tokens
           </Text>
+          <View className="flex-row gap-2">
+            {['5', '10', '20'].map((preset) => (
+              <Pressable
+                key={preset}
+                accessibilityRole="button"
+                accessibilityLabel={`${preset} USDC`}
+                disabled={busy}
+                onPress={() => setAmount(preset)}
+                className={`flex-1 items-center rounded-full py-3 ${amount === preset ? 'bg-ink' : 'bg-card'}`}
+              >
+                <Text
+                  className={`text-base font-semibold ${amount === preset ? 'text-white' : 'text-ink'}`}
+                >
+                  {preset} USDC
+                </Text>
+              </Pressable>
+            ))}
+          </View>
           <TextInput
             accessibilityLabel="Amount in test tokens"
             editable={!busy}
@@ -341,7 +366,9 @@ export default function AddMoneyScreen() {
         secondary
         disabled={busy}
         label="Back to wallet"
-        onPress={() => router.dismissTo('/wallet')}
+        onPress={() =>
+          router.canGoBack() ? router.back() : router.replace('/home')
+        }
       />
     </Screen>
   );

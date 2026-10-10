@@ -30,6 +30,8 @@ import {
   readGuardianInvite,
 } from '../../lib/recoveryApi';
 import { getSafeWallet } from '../../lib/safeWallet';
+import { getSession } from '../../lib/auth';
+import { ErrorText } from '../../components/ui';
 
 export function AddressLine({
   label,
@@ -57,19 +59,19 @@ export function Words({
   caption: string;
 }) {
   return (
-    <View className="rounded-2xl bg-ink p-4 gap-1">
-      <Text className="text-xs text-white">{caption}</Text>
+    <View className="gap-1 rounded-2xl bg-ink p-4">
+      <Text className="text-xs font-semibold uppercase text-white/70">
+        {caption}
+      </Text>
       <Text className="text-2xl font-bold text-white">
         {addressWords(address)}
       </Text>
-      <Text className="text-xs text-white">{shortAddress(address)}</Text>
+      <Text className="text-xs text-white/70">{shortAddress(address)}</Text>
     </View>
   );
 }
 
-export function ErrorText({ error }: { error: string | null }) {
-  return error ? <Text className="text-base text-accent">{error}</Text> : null;
-}
+export { ErrorText } from '../../components/ui';
 
 /**
  * Create a backup phrase, show it once, then check 3 words. The phrase lives
@@ -111,7 +113,7 @@ export function BackupPhraseSteps({
         </Text>
         <View className="flex-row flex-wrap gap-2">
           {words.map((word, i) => (
-            <View key={i} className="rounded-xl border border-line px-3 py-2">
+            <View key={i} className="rounded-xl bg-canvas px-3 py-2">
               <Text className="text-base text-ink">
                 {i + 1}. {word}
               </Text>
@@ -134,7 +136,7 @@ export function BackupPhraseSteps({
             onChangeText={(text) =>
               setAnswers((a) => a.map((v, j) => (j === i ? text : v)))
             }
-            className="rounded-xl border border-line bg-white px-3 py-3 text-base text-ink"
+            className="rounded-xl bg-canvas px-3 py-3 text-base text-ink"
           />
         </View>
       ))}
@@ -185,7 +187,11 @@ export function FriendInvite({
 
   useEffect(() => {
     const controller = new AbortController();
-    createGuardianInvite(safe, controller.signal)
+    getSession()
+      .catch(() => null)
+      .then((session) =>
+        createGuardianInvite(safe, controller.signal, session?.username),
+      )
       .then((invite) => {
         setPayload({
           t: 'sqw-guardian-invite',
@@ -235,7 +241,7 @@ export function FriendInvite({
           guardian” and scans this code. The code expires in 15 minutes. If
           their phone cannot reach Swissquote, it shows a code: scan it below.
         </Text>
-        <QrCode value={JSON.stringify(payload)} />
+        <QrCode shareable value={JSON.stringify(payload)} />
         <View className="flex-row items-center gap-2">
           <ActivityIndicator />
           <Text className="text-sm text-muted">Waiting for your friend…</Text>
