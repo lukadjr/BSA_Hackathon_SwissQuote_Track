@@ -6,5 +6,8 @@
   "types": "./index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "viem": "2.57.4"
   }
 }

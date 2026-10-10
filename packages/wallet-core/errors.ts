@@ -5,6 +5,9 @@ export type WalletErrorCode =
   | 'AUTH_UNAVAILABLE'
   | 'KEY_UNAVAILABLE'
   | 'STORAGE_FAILED'
+  | 'KEY_GENERATION_FAILED'
+  | 'INVALID_MESSAGE'
+  | 'SIGNING_FAILED'
   | 'NOT_IMPLEMENTED';
 
 /** Use safe messages only: never attach keys or raw native errors. */
