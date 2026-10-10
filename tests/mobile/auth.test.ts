@@ -31,16 +31,14 @@ beforeEach(() => {
   });
   vi.stubGlobal(
     'fetch',
-    vi
-      .fn()
-      .mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          client_id: 'demo-user',
-          kyc_status: 'pending',
-          mocked: true,
-        }),
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        client_id: 'demo-user',
+        kyc_status: 'pending',
+        mocked: true,
       }),
+    }),
   );
 });
 describe('mock login integration', () => {

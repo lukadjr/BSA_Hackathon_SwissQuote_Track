@@ -52,6 +52,7 @@ describe('treasury Safe transaction signing and tracking', () => {
   let readKey: ReturnType<typeof vi.fn>;
   let status: ReturnType<typeof vi.fn>;
   let transferLog: unknown;
+  let persistTransfer: ReturnType<typeof vi.fn>;
   beforeEach(() => {
     pending = null;
     tracked = null;
@@ -150,6 +151,9 @@ describe('treasury Safe transaction signing and tracking', () => {
       }),
       data: encodeAbiParameters([{ type: 'uint256' }], [1_000_000n]),
     };
+    persistTransfer = vi.fn(async (value: SubmittedTransfer | null) => {
+      tracked = value;
+    });
     wallet = createTreasuryOperations({
       client,
       storage: {
@@ -159,9 +163,7 @@ describe('treasury Safe transaction signing and tracking', () => {
       relay,
       activity: {
         readPending: async () => tracked,
-        writePending: async (v) => {
-          tracked = v;
-        },
+        writePending: persistTransfer,
         writeConfirmed: vi.fn(),
       },
       getAccount: async () => info,
@@ -335,6 +337,92 @@ describe('treasury Safe transaction signing and tracking', () => {
       success: true,
     });
     expect(readKey).toHaveBeenCalledTimes(1);
+  });
+  it('clears local tracking when backgrounding interrupts storage before submission', async () => {
+    const controller = new AbortController();
+    const preview = await wallet.prepareTransfer({ recipient, amount: '1' });
+    persistTransfer.mockImplementationOnce(async (value) => {
+      tracked = value;
+      controller.abort();
+    });
+    await expect(
+      wallet.submitTransfer(preview, controller.signal),
+    ).rejects.toMatchObject({ code: 'AUTH_CANCELLED' });
+    expect(relay.submit).not.toHaveBeenCalled();
+    expect(pending).toBeNull();
+    expect(tracked).toBeNull();
+  });
+  it('does not persist a signed authorization if transfer tracking cannot be saved', async () => {
+    const preview = await wallet.prepareTransfer({ recipient, amount: '1' });
+    persistTransfer.mockRejectedValueOnce(
+      new WalletError('STORAGE_FAILED', 'storage'),
+    );
+    await expect(wallet.submitTransfer(preview)).rejects.toMatchObject({
+      code: 'STORAGE_FAILED',
+    });
+    expect(relay.submit).not.toHaveBeenCalled();
+    expect(pending).toBeNull();
+  });
+  it('rolls back transfer tracking when signed authorization storage fails', async () => {
+    const preview = await wallet.prepareTransfer({ recipient, amount: '1' });
+    const original = relay.writePending;
+    relay.writePending = vi
+      .fn()
+      .mockRejectedValueOnce(new WalletError('STORAGE_FAILED', 'storage'))
+      .mockImplementation(original);
+    await expect(wallet.submitTransfer(preview)).rejects.toMatchObject({
+      code: 'STORAGE_FAILED',
+    });
+    expect(relay.submit).not.toHaveBeenCalled();
+    expect(tracked).toBeNull();
+    expect(pending).toBeNull();
+  });
+  it('rejects a nonce changed while the biometric prompt was open', async () => {
+    const preview = await wallet.prepareTransfer({ recipient, amount: '1' });
+    readKey.mockImplementationOnce(async () => {
+      currentNonce = 1n;
+      return key;
+    });
+    await expect(wallet.submitTransfer(preview)).rejects.toMatchObject({
+      code: 'TRANSFER_EXPIRED',
+    });
+    expect(relay.submit).not.toHaveBeenCalled();
+    expect(pending).toBeNull();
+  });
+  it('rejects Safe fee reimbursement even when the relay labels it confirmed', async () => {
+    const sent = await wallet.submitTransfer(
+      await wallet.prepareTransfer({ recipient, amount: '1' }),
+    );
+    status.mockResolvedValue({
+      id: sent.userOperationHash,
+      safe_address: safe,
+      kind: 'transfer',
+      status: 'confirmed',
+      transaction_hash: transactionHash,
+      gas_payer: 'swissquote_treasury',
+    });
+    receipt = {
+      transactionHash,
+      blockNumber: 10n,
+      blockHash: '0xblock',
+      status: 'success',
+      logs: [
+        transferLog,
+        {
+          address: safe,
+          topics: encodeEventTopics({
+            abi: safeRelayAbi,
+            eventName: 'ExecutionSuccess',
+            args: { txHash: sent.userOperationHash },
+          }),
+          data: encodeAbiParameters([{ type: 'uint256' }], [1n]),
+        },
+      ],
+    };
+    await expect(wallet.confirmTransfer(sent)).rejects.toMatchObject({
+      code: 'VERIFICATION_FAILED',
+    });
+    expect(pending).not.toBeNull();
   });
   it('blocks a second operation while a signed relay is pending', async () => {
     await wallet.submitSecurityOperation(
