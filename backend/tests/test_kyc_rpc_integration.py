@@ -22,7 +22,7 @@ from app.wallet_registry import control
 def rpc_server(monkeypatch):
     state = {
         "owner": OWNER_KEY.address.lower(),
-        "code": "0x60006000",
+        "code": "0x" + control.PROXY_RUNTIME.hex(),
         "chain": hex(11155111),
         "requests": [],
     }
@@ -170,7 +170,7 @@ def test_http_rpc_undeployed_and_wrong_chain_are_refused(client, rpc_server):
     )
     for changed, reason in [
         ({"code": "0x"}, "pending_deployment"),
-        ({"code": "0x60006000", "chain": "0x1"}, "verification_unavailable"),
+        ({"code": "0x" + control.PROXY_RUNTIME.hex(), "chain": "0x1"}, "verification_unavailable"),
     ]:
         rpc_server.update(changed)
         r = client.post(

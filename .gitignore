@@ -78,3 +78,7 @@ Desktop.ini
 .sepolia-smoke.json
 .sepolia-smoke.json.tmp
 .sepolia-smoke.json.lock
+
+# Shared dependency symlinks in isolated development worktrees
+node_modules
+.venv

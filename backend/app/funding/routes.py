@@ -1,5 +1,6 @@
 """Funding intents. The web API never signs treasury transactions."""
 
+import os
 import secrets
 from datetime import timedelta
 from decimal import Decimal
@@ -135,6 +136,8 @@ def check_eligibility(intent, db):
     if (wallet.safe_address, wallet.owner_address) != (intent.safe_address, intent.owner_address):
         raise HTTPException(status_code=409, detail="Wallet changed; relink required")
     treasury, token = chain.public_config()
+    if intent.owner_address == treasury:
+        raise HTTPException(status_code=409, detail="Treasury cannot be the client owner")
     if (treasury, token) != (intent.treasury_address, intent.token_address):
         raise HTTPException(status_code=409, detail="Treasury configuration changed")
     if intent.kind == "deposit":
@@ -230,7 +233,7 @@ def create(
     try:
         treasury, token = chain.public_config()
         mode = chain.security_status(req.safe_address) if req.kind == "deposit" else "setup_only"
-        domain = bank.os.getenv("WALLET_LINK_DOMAIN", "swissquote-wallet.demo")
+        domain = os.getenv("WALLET_LINK_DOMAIN", "swissquote-wallet.demo")
         if not domain or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for c in domain):
             raise ControlError("invalid_domain")
         intent = FundingDB(

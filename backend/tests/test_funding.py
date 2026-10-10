@@ -479,3 +479,135 @@ def test_sdk_deployment_builder_uses_pinned_safe_and_rejects_invalid_owner(monke
     assert value["data"].startswith("0x1688f0b9")
     with pytest.raises(ControlError):
         chain.deployment("not-an-address")
+
+
+def test_concurrent_creation_has_one_active_intent(client, treasury):
+    from concurrent.futures import ThreadPoolExecutor
+
+    def attempt(n):
+        return create(client, idempotency_key=f"concurrent-{n}-" + "x" * 24)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(attempt, range(2)))
+    assert sorted(r.status_code for r in results) == [200, 409]
+    with treasury["sessions"]() as db:
+        assert db.query(routes.FundingDB).count() == 1
+
+
+def test_concurrent_confirmations_queue_once(client, treasury):
+    from concurrent.futures import ThreadPoolExecutor
+
+    intent = create(client).json()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: confirm(client, intent), range(2)))
+    assert all(r.status_code in (200, 409) for r in results)
+    assert any(r.status_code == 200 for r in results)
+    assert status(client, intent)["status"] == "queued"
+    tick(treasury)
+    assert len(treasury["state"]["broadcasts"]) == 1
+
+
+def test_security_check_requires_enabled_seven_day_module_and_three_guardians(monkeypatch):
+    from eth_abi import encode
+
+    monkeypatch.delenv("FUNDING_ALLOW_UNPROTECTED_DEMO", raising=False)
+    replies = [
+        "0x" + encode(["bool"], [True]).hex(),
+        "0x" + encode(["address[]"], [["0x" + n * 40 for n in "123"]]).hex(),
+        "0x" + encode(["uint256"], [2]).hex(),
+    ]
+    calls = []
+    monkeypatch.setattr(chain, "rpc_batch", lambda batch: calls.extend(batch) or replies)
+    assert chain.security_status(SAFE) == "recovery_2_of_3_seven_days"
+    assert calls[1][1][0]["to"] == chain.RECOVERY_7D
+    replies[2] = "0x" + encode(["uint256"], [1]).hex()
+    with pytest.raises(ControlError):
+        chain.security_status(SAFE)
+    replies[2] = "0x" + encode(["uint256"], [2]).hex()
+    replies[0] = "0x" + encode(["bool"], [False]).hex()
+    with pytest.raises(ControlError):
+        chain.security_status(SAFE)
+    monkeypatch.setenv("FUNDING_ALLOW_UNPROTECTED_DEMO", "true")
+    assert chain.security_status(SAFE) == "unprotected_test_demo"
+
+
+def test_snapshot_requires_sepolia_and_six_decimal_token(monkeypatch):
+    from eth_abi import encode
+
+    monkeypatch.setenv("SWISSQUOTE_TREASURY_ADDRESS", SAFE)
+    monkeypatch.setenv("ERC20_TEST_ADDRESS", TOKEN)
+    state = {"chain": 11155111, "decimals": 6, "code": "0x1234"}
+
+    def rpc(batch):
+        if batch[0][0] == "eth_chainId":
+            return [hex(state["chain"]), "0x64"]
+        return [
+            state["code"],
+            "0x" + encode(["uint256"], [state["decimals"]]).hex(),
+            "0x" + encode(["uint256"], [100]).hex(),
+            "0x123",
+        ]
+
+    monkeypatch.setattr(chain, "rpc_batch", rpc)
+    assert chain.snapshot()["balance_units"] == "100"
+    state["chain"] = 1
+    with pytest.raises(ControlError):
+        chain.snapshot()
+    state["chain"] = 11155111
+    state["decimals"] = 18
+    with pytest.raises(ControlError):
+        chain.snapshot()
+    state["decimals"] = 6
+    state["code"] = "0x"
+    with pytest.raises(ControlError):
+        chain.snapshot()
+
+
+def test_missing_journal_after_broadcast_never_signs_replacement(client, treasury, monkeypatch):
+    intent = create(client).json()
+    confirm(client, intent)
+    tick(treasury)
+    original_hash = status(client, intent)["transaction_hash"]
+    treasury["journal"].close()
+    treasury["journal"] = worker.Journal(treasury["journal_path"].with_name("empty.sqlite"))
+    monkeypatch.setattr(worker, "prepare", lambda *args: pytest.fail("cannot sign replacement"))
+    tick(treasury)
+    result = status(client, intent)
+    assert result["status"] == "reconciling"
+    assert result["transaction_hash"] == original_hash
+    assert result["failure_reason"] == "signed_transaction_journal_missing"
+    assert len(treasury["state"]["broadcasts"]) == 1
+
+
+def test_malformed_receipt_keeps_worker_and_payment_pending(client, treasury):
+    intent = create(client).json()
+    confirm(client, intent)
+    tick(treasury)
+    treasury["state"]["receipt"] = {"transactionHash": status(client, intent)["transaction_hash"]}
+    tick(treasury)
+    assert status(client, intent)["status"] == "reconciling"
+    assert status(client, intent)["failure_reason"] == "invalid_chain_response"
+    assert len(treasury["state"]["broadcasts"]) == 1
+
+
+def test_concurrent_treasury_setup_preserves_one_key(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    path = tmp_path / ".env"
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        addresses = list(pool.map(lambda _: initialize(path), range(2)))
+    assert addresses[0] == addresses[1]
+    assert (
+        Account.from_key(dotenv_values(path)["SWISSQUOTE_TREASURY_PRIVATE_KEY"]).address
+        == addresses[0]
+    )
+
+
+def test_malformed_chain_snapshot_is_sanitized(monkeypatch):
+    monkeypatch.setenv("SWISSQUOTE_TREASURY_ADDRESS", SAFE)
+    monkeypatch.setenv("ERC20_TEST_ADDRESS", TOKEN)
+    monkeypatch.setattr(chain, "rpc_batch", lambda _: [None, "provider-secret"])
+    with pytest.raises(ControlError) as error:
+        chain.snapshot()
+    assert error.value.status == "verification_unavailable"
+    assert "provider-secret" not in str(error.value)

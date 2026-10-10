@@ -124,7 +124,6 @@ export default function AddMoneyScreen() {
           const result = await getFunding(intent.id, signal);
           if (result.id !== intent.id || result.message !== intent.message)
             throw new Error('Unexpected bank status');
-          if (!signal.aborted) setIntent(result);
         }
         await load(signal);
       }),
@@ -147,7 +146,10 @@ export default function AddMoneyScreen() {
   function review(kind: FundingIntent['kind']) {
     void run(async (signal) => {
       const fingerprint = `${kind}:${amount}:${safe?.safeAddress}`;
-      if (creation.current?.fingerprint !== fingerprint)
+      if (
+        creation.current?.fingerprint !== fingerprint ||
+        (intent && !isActiveFunding(intent))
+      )
         creation.current = { fingerprint, key: randomUUID() };
       const result = await prepareFunding(
         kind,

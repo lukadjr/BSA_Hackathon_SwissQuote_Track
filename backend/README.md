@@ -1,7 +1,7 @@
 # Swissquote demo backend
 
-FastAPI + SQLite. **Bank identity/KYC, AML, Travel Rule providers and bank-transfer
-execution are mocked.** Safe-control verification uses real EIP-191 signatures
+FastAPI + SQLite. **Bank identity/KYC, AML, Travel Rule providers are mocked. The demo treasury submits real Sepolia transactions once funded;
+the Swissquote account is simulated and manually funded through faucets.** Funded Sepolia acceptance testing is still pending. Safe-control verification uses real EIP-191 signatures
 and read-only Sepolia RPC calls. No client private key is accepted or stored.
 
 ## Run
@@ -20,7 +20,9 @@ export SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
 python -m uvicorn app.main:app --app-dir backend --reload --host 0.0.0.0 --port 8000
 ```
 
-`backend/.env.example` documents settings; it is not loaded automatically. The
+`backend/.env.example` documents settings. `backend/.env` is loaded automatically
+from the backend directory, regardless of cwd; shell settings take precedence.
+The web API excludes the treasury private key when loading this file. The
 SQLite URL defaults to `sqlite:///./swissquote_mock.db`, relative to the working
 directory. The token must contain at least 32 characters. Unconfigured auth returns
 `503`; `/health` remains public. Set `MOCK_KYC_STATUS=pending` or `rejected` and
@@ -46,6 +48,11 @@ Never reuse a production credential. There is no public KYC-approval endpoint.
 | `POST /wallets/link/challenge` | Verified demo identity + deployed supported Safe required; issue a 5-minute challenge |
 | `POST /wallets/link/complete` | Atomically consume challenge, verify signature and recheck on-chain control; record evidence |
 | `GET /wallets/link/status` | Recheck ownership against the attestation; report bank eligibility |
+| `GET /bank/account` | Actual treasury balance, conservative available balance and explicit single-client demo labels |
+| `GET /bank/funding/intents` | Last ten authenticated client requests; supports restart/resume |
+| `POST /bank/funding/intents` | Create a signed-consent instruction for `deploy` or `deposit`; client-scoped idempotency |
+| `POST /bank/funding/intents/{intent_id}/confirm` | Verify client signature and queue once; the API never signs treasury transactions |
+| `GET /bank/funding/intents/{intent_id}` | Receipt/status for that client only |
 | `POST /bank/transfers/authorize` | Recheck eligibility and return a **mock authorization preview**; moves no funds |
 | `POST /transactions/screen` | Mock destination/high-value policy for client transfers |
 | `POST /recovery/request` | Existing recovery stub, `501` |
@@ -61,7 +68,7 @@ Challenges cannot be replayed, including concurrent requests and failed signatur
 attempts. A registration change revokes all old challenges and attestations.
 
 The verifier uses a **server-configured RPC** and one block number for all state
-reads. It checks Sepolia, the proxy runtime returned by the pinned Safe factory,
+reads. It checks Sepolia, the official pinned Safe 1.4.1 proxy runtime artifact,
 pinned Safe singleton, version 1.4.1, one matching owner, threshold 1 and enabled
 Safe4337Module 0.3.0. It records the checked block number/hash, signature, challenge
 and timestamp. It does **not** certify guardians, timelocks, arbitrary enabled
@@ -118,3 +125,114 @@ endpoint completion, expiry/replay, cross-client access, registration races,
 owner rotation, identity downgrade and transport/ABI failures. The HTTP RPC fixture
 is an **explicitly mocked chain**, not evidence of a positive live Sepolia link.
 See [iPhone handoff](../docs/kyc-iphone-handoff.md) for native acceptance checks.
+
+## Add money: persistent demo treasury
+
+From the feature checkout root, create the bank wallet **once**:
+
+```bash
+PYTHONPATH=backend backend/.venv/bin/python -m app.funding.setup
+```
+
+The command prints only the public address. It writes a mode-0600, gitignored
+`backend/.env`, preserves existing settings and reuses an existing valid key.
+An existing address with a missing/mismatched key is refused instead of replaced.
+Back up this file privately; neither `.env` nor the worker journal belongs in Git.
+Funds live on-chain, and the private key is needed to spend them.
+
+Manually send **Ethereum Sepolia ETH** and **Sepolia test USDC** to that printed
+address using [an ETH faucet](https://ethereum.org/developers/docs/networks/) and
+[Circle's test-token faucet](https://faucet.circle.com/). Match Ethereum Sepolia,
+not Base Sepolia or mainnet. There is no automatic faucet or fabricated balance.
+The configured six-decimal token must match the mobile token configuration.
+
+For a demo identity, explicitly set `MOCK_KYC_STATUS=verified` in local `.env`.
+Copy its disposable `MOCK_ACCESS_TOKEN` into the mobile's local
+`EXPO_PUBLIC_DEMO_ACCESS_TOKEN`, and configure the API URL. Do not print the
+server file to share the token: it also contains the treasury key.
+
+Run these in **two terminals**, both from the feature root:
+
+```bash
+# API: reads public treasury configuration, never loads/signs with its private key
+backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
+```
+
+```bash
+# Worker: separate process, server-only treasury key and private transaction journal
+PYTHONPATH=backend backend/.venv/bin/python -m app.funding.worker
+```
+
+`--once` runs one reconciliation pass. The worker's file lock prevents two workers
+using the same journal. All workers must use the **same absolute journal and bank
+DB paths**. Setup generates absolute paths automatically. The key is separate
+from client and guardian keys; the treasury is refused as a client owner.
+
+On the phone: **Add money → review wallet setup → authenticate/confirm → wait for
+deployment → verify bank connection → enter amount → review → authenticate/confirm
+→ confirmed receipt**. The setup transaction uses the exact same pinned SDK
+initializer/address as the app and grants no bank ownership. The client signs
+consent; the treasury signs the bank's deployment/withdrawal transaction.
+The treasury pays those fees. No ETH top-up of the client's Safe is part of this
+feature; outgoing ERC-4337 paymaster sponsorship is separate work.
+
+Normal deposits require the linked current Safe owner and an enabled Candide
+`After7Days` module with three distinct guardians and threshold two. Until recovery
+is implemented, an operator can **explicitly** set
+`FUNDING_ALLOW_UNPROTECTED_DEMO=true` for disposable test-token funding tests.
+Both signed consent and UI disclose this exception; it is not recovery protection.
+Keep the setting false for the complete track demo. Bank funding must not replace
+an existing Safe with an address derived from a recovered owner. The recovery
+workstream still needs to persist that Safe and accommodate the new module in the
+mobile's currently strict module validator.
+
+Funding instructions expire after five minutes and bind client, domain, action,
+Safe, owner, chain, treasury, token, exact base-unit amount and security mode.
+There is one active operation per client. Positive amounts have at most six decimal
+places and a 10,000-token limit; higher amounts require simulated review and are
+refused. Account balances are the single demo client's entire treasury balance,
+not a production multi-client bank ledger or fiat account. Pending withdrawals
+are conservatively reserved; a mined pending withdrawal can temporarily be counted
+both in the chain balance decrease and the reservation until reconciliation.
+
+Only a canonical receipt with two confirmations and exactly matching token,
+sender, recipient and amount produces success. Worker storage commits the signed
+transaction before publishing/broadcasting its hash. Timeouts rebroadcast identical
+bytes; restarts/repeated confirmation cannot produce another payment. A definitively
+reverted transaction fails. Unknown/mismatched receipts remain pending for review.
+**Never delete pending request or journal data to force a retry.** A missing journal
+for an already submitted request is quarantined, never signed again. The worker
+serializes transactions; a stuck request intentionally prevents further dispatch.
+A key/configuration change or owner rotation before signing blocks dispatch.
+A transaction already signed/broadcast cannot be cancelled by subsequent recovery.
+
+Two confirmations are a testnet policy, not a promise of irreversible finality.
+Real bank infrastructure, KYC/AML/sanctions/Travel Rule providers, recovery and
+outgoing paymaster sponsorship are not implemented by this feature.
+
+## Optional real local-EVM acceptance
+
+The ordinary pytest/Vitest suites use explicitly mocked chain responses and real
+library signatures. An additional opt-in test deploys the pinned Safe contracts,
+links the owner through the real verifier, sends an OpenZeppelin ERC-20 with six
+decimals, checks actual balance deltas and replay/restart behavior. It uses a local
+chain with Sepolia's chain ID; it is **not** a positive Sepolia funding claim.
+
+Install test tools in a temporary directory (not application dependencies):
+
+```bash
+npm install --prefix /tmp/swissquote-funding-evm --no-audit --no-fund ganache@7.9.2 solc@0.8.30 @openzeppelin/contracts@5.4.0
+node scripts/funding-evm-fixture.cjs
+```
+
+The fixture copies public bytecode for the pinned Safe dependencies from Sepolia
+and creates ephemeral funded keys in a mode-0600 file under `/tmp`. It never prints
+those keys. In another terminal:
+
+```bash
+FUNDING_EVM_FIXTURE=/tmp/swissquote-funding-evm/fixture.json backend/.venv/bin/python -m pytest backend/tests/test_funding_local_evm.py -q
+```
+
+Each run creates a new owner/Safe; restart the fixture if its test-token supply runs
+low. Stop the fixture after testing. Real funded Sepolia acceptance and native
+biometric/background/navigation tests remain separate device/network gates.

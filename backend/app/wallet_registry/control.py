@@ -13,6 +13,17 @@ SINGLETON = "0x29fcb43b46531bca003ddc8fcb67ffe91900c762"
 FACTORY = "0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67"
 MODULE = "0x75cf11467937ce3f2f357ce24ffc3dbf8fd5c226"
 
+# Official @safe-global/safe-contracts 1.4.1 SafeProxy deployedBytecode.
+# https://github.com/safe-global/safe-smart-account/tree/v1.4.1/contracts/proxies
+# Its factory exposes proxyCreationCode(), not proxyRuntimeCode().
+PROXY_RUNTIME = bytes.fromhex(
+    "608060405273ffffffffffffffffffffffffffffffffffffffff600054167fa619486e0000000000"
+    "000000000000000000000000000000000000000000000060003514156050578060005260206000f3"
+    "5b3660008037600080366000845af43d6000803e60008114156070573d6000fd5b3d6000f3fea264"
+    "697066735822122003d1488ee65e08fa41e58e888a9865554c535f2c77126a82cb4c0f917f314413"
+    "64736f6c63430007060033"
+)
+
 
 class ControlError(Exception):
     def __init__(self, status: str):
@@ -39,7 +50,15 @@ def rpc_batch(calls: list[tuple[str, list]]) -> list:
         for i, (method, params) in enumerate(calls)
     ]
     try:
-        request = Request(url, json.dumps(payload).encode(), {"Content-Type": "application/json"})
+        request = Request(
+            url,
+            json.dumps(payload).encode(),
+            {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "SwissquoteWalletPrototype/0.1",
+            },
+        )
         with urlopen(request, timeout=5) as response:
             raw = response.read(1_000_001)
         if len(raw) > 1_000_000:
@@ -74,10 +93,9 @@ def verify_control(safe: str, owner: str) -> ControlEvidence:
         code = rpc_batch([("eth_getCode", [safe, block])])[0]
         if code in ("0x", "0x0", None):
             raise ControlError("pending_deployment")
-        singleton, runtime, owners, threshold, version, enabled, header = rpc_batch(
+        singleton, owners, threshold, version, enabled, header = rpc_batch(
             [
                 ("eth_getStorageAt", [safe, "0x0", block]),
-                call(FACTORY, "proxyRuntimeCode()"),
                 call(safe, "getOwners()"),
                 call(safe, "getThreshold()"),
                 call(safe, "VERSION()"),
@@ -86,8 +104,7 @@ def verify_control(safe: str, owner: str) -> ControlEvidence:
             ]
         )
         # Reject impostor contracts that simply return plausible getOwners()/VERSION().
-        expected_code = decode(["bytes"], bytes.fromhex(runtime[2:]))[0]
-        if bytes.fromhex(code[2:]) != expected_code or not expected_code:
+        if bytes.fromhex(code[2:]) != PROXY_RUNTIME:
             raise ControlError("unsupported_safe")
         if int(singleton, 16) != int(SINGLETON, 16):
             raise ControlError("unsupported_safe")

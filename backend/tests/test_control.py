@@ -11,7 +11,7 @@ from app.wallet_registry import control
 
 BLOCK = "0x7b"
 HASH = "0x" + "a" * 64
-PROXY = b"canonical-proxy-test-runtime"
+PROXY = control.PROXY_RUNTIME
 
 
 def abi(types, values):
@@ -44,7 +44,6 @@ def snapshot(monkeypatch):
             state[key]
             for key in [
                 "singleton",
-                "runtime",
                 "owners",
                 "threshold",
                 "version",
@@ -63,7 +62,7 @@ def test_real_decoding_and_consistent_snapshot(snapshot):
     for method, params in snapshot["calls"][2:]:
         if method != "eth_getBlockByNumber":
             assert params[-1] == BLOCK
-    assert any(
+    assert not any(
         method == "eth_call" and params[0]["to"] == control.FACTORY
         for method, params in snapshot["calls"]
     )

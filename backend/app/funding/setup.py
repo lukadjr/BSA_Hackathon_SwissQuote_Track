@@ -1,7 +1,9 @@
 """Create the test treasury exactly once; never print a private key."""
 
 import argparse
+import fcntl
 import os
+import secrets
 from pathlib import Path
 
 from dotenv import dotenv_values, set_key
@@ -12,6 +14,15 @@ from app.funding.chain import USDC
 
 
 def initialize(path=ENV_PATH):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(path) + ".setup.lock", os.O_CREAT | os.O_RDWR, 0o600)
+    with os.fdopen(fd, "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _initialize(path)
+
+
+def _initialize(path):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
@@ -38,7 +49,7 @@ def initialize(path=ENV_PATH):
         "FUNDING_ALLOW_UNPROTECTED_DEMO": "false",
         "MOCK_USER_ID": "demo-user",
         "MOCK_KYC_STATUS": "pending",
-        "MOCK_ACCESS_TOKEN": __import__("secrets").token_urlsafe(32),
+        "MOCK_ACCESS_TOKEN": secrets.token_urlsafe(32),
     }
     (path.parent / "data").mkdir(exist_ok=True)
     for name, value in defaults.items():
@@ -62,7 +73,8 @@ def main():
     print(f"Configuration saved to {args.env_file}. Keep a private backup; do not commit it.")
     print("Fund this address manually with Ethereum Sepolia ETH and Circle Sepolia test USDC.")
     print(
-        "Bank KYC defaults to pending; recovery verification is required unless explicitly opted out for tests."
+        "Bank KYC defaults to pending; recovery verification is required "
+        "unless explicitly opted out for tests."
     )
 
 

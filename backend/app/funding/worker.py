@@ -172,7 +172,10 @@ def process_once(sessions, journal, account):
         if intent is None:
             return False
         saved = journal.get(intent.id)
+        has_submission = intent.transaction_hash is not None
         try:
+            if saved is None and has_submission:
+                raise ControlError("signed_transaction_journal_missing")
             if saved is None:
                 prepared = prepare(intent, db, account)
                 if prepared is None:
@@ -210,18 +213,23 @@ def process_once(sessions, journal, account):
                 if intent.status in ("confirmed", "failed"):
                     intent.active_user = None
             db.commit()
-        except (ControlError, HTTPException) as error:
+        except (ControlError, HTTPException, ValueError, TypeError, KeyError) as error:
             # Never release a signed transaction merely because the RPC timed out.
-            if saved is not None:
+            if saved is not None or has_submission:
                 intent.status = "reconciling"
-                intent.transaction_hash = saved[1]
+                if saved is not None:
+                    intent.transaction_hash = saved[1]
             elif isinstance(error, ControlError) and error.status == "verification_unavailable":
                 intent.status = "queued"  # retry temporary infrastructure failure
             else:
                 intent.status = "failed"
                 intent.active_user = None
             intent.failure_reason = (
-                error.status if isinstance(error, ControlError) else error.detail
+                error.status
+                if isinstance(error, ControlError)
+                else error.detail
+                if isinstance(error, HTTPException)
+                else "invalid_chain_response"
             )
             db.commit()
         return True
