@@ -8,6 +8,7 @@ from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
 from eth_account import Account
 from eth_account.messages import _hash_eip191_message, encode_typed_data
+from eth_keys.exceptions import BadSignature
 from eth_utils import keccak
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import StringConstraints, field_validator
@@ -266,7 +267,7 @@ def validate_owner_request(req):
         raise
     except recovery_chain.ChainError:
         raise ControlError("verification_unavailable") from None
-    except (ValueError, TypeError, KeyError, DecodingError):
+    except (ValueError, TypeError, KeyError, DecodingError, BadSignature):
         raise HTTPException(422, "Invalid Safe transaction") from None
 
 

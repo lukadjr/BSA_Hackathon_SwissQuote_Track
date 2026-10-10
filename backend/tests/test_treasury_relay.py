@@ -201,3 +201,10 @@ def test_truncated_abi_is_a_client_error_not_server_error(policy):
         headers=HEADERS,
     )
     assert result.status_code == 422, result.json()
+
+
+@pytest.mark.parametrize("signature", ["0x" + "00" * 65, "0x" + "ff" * 64 + "03"])
+def test_malformed_signature_returns_client_error(policy, signature):
+    request = authorization()
+    request["signature"] = signature
+    assert policy.post("/transactions/relay", json=request, headers=HEADERS).status_code == 422
