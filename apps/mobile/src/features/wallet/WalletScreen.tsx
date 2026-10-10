@@ -9,6 +9,7 @@ import { useOwnerAddress } from '../../hooks/useOwnerAddress';
 import { resetWalletForDev } from '../../lib/devReset';
 import { describeWalletError } from '../../lib/wallet';
 import { getSafeAccount } from '../../lib/safeWallet';
+import { clearSession, getSession } from '../../lib/auth';
 
 function confirmDevReset() {
   Alert.alert(
@@ -36,6 +37,11 @@ export default function WalletScreen() {
   const [account, setAccount] = useState<SafeAccountInfo | null>(null);
   const [chainError, setChainError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [sessionUser, setSessionUser] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getSession().then((s) => setSessionUser(s?.username ?? null));
+  }, []);
   useFocusEffect(
     useCallback(() => {
       setAttempt((value) => value + 1);
@@ -133,6 +139,15 @@ export default function WalletScreen() {
           onPress={confirmDevReset}
         />
       )}
+      <Button
+        label={sessionUser ? `Log out (${sessionUser})` : 'Log out of Swissquote'}
+        secondary
+        onPress={() => {
+          clearSession()
+            .then(() => router.replace('/login'))
+            .catch((e: unknown) => Alert.alert('Error', describeWalletError(e)));
+        }}
+      />
       <Text className="text-sm text-muted">
         Sepolia testnet only. Recovery is not configured for this milestone.
       </Text>

@@ -19,6 +19,10 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen
+          name="login"
+          options={{ title: 'Swissquote', headerBackVisible: false }}
+        />
+        <Stack.Screen
           name="create-wallet"
           options={{ title: 'Create wallet', headerBackVisible: false }}
         />
