@@ -1054,9 +1054,10 @@ Le brief demande de **déclarer les outils d'IA utilisés et leur rôle**. La li
 **Milestone 1 livré ; flux transaction Safe/ERC-4337 implémenté, acceptation financée sur Sepolia et appareil réel encore à prouver.**
 
 - **Implémenté :** création EOA et signature/vérification EIP-191 via viem ; adaptateur SecureStore protégé, startup et écran de signature ; annulation sur background/navigation ; API de métadonnées SQLite avec token de démonstration configuré côté serveur et validation stricte. Wallet/Send lisent les soldes Safe et construisent/signent/soumettent les transferts ERC-20 Sepolia via RPC/bundler configurés ; voir [runbook transaction](docs/sepolia-transaction.md). Voir [getting-started](docs/getting-started.md) et [backend](backend/README.md).
-- **Non implémenté :** preuve de contrôle on-chain, Recovery Kit hors ligne, signatures guardian et recovery. Le code de déploiement Safe et de transfert est implémenté mais pas encore démontré avec une Safe financée sur Sepolia. Les endpoints backend recovery refusent de procéder (`501`) au lieu de produire une fausse approval.
+- **Recovery (implemented, see [docs/recovery.md](docs/recovery.md)):** Candide module with a **3-day** waiting period, guardians backup phrase / Swissquote / trusted friend (QR invite), flat 2-of-3, owner alert and cancel, tested end to end on a local Sepolia fork. Not yet demonstrated on live Sepolia with real phones.
+- **Non implémenté :** preuve de contrôle on-chain. Le code de déploiement Safe et de transfert est implémenté mais pas encore démontré avec une Safe financée sur Sepolia.
 
-- **Décidé :** Expo/React Native, EOA client locale avec Face ID/biométrie à la signature, ClientSafe, **3 guardians directs SQ/A/B, recovery 2/3**, contestation **7 jours on-chain**, FastAPI, Sepolia.
+- **Décidé :** Expo/React Native, EOA client locale avec Face ID/biométrie à la signature, ClientSafe, **3 guardians directs SQ/A/B, recovery 2/3**, contestation **3 days on-chain** (changed from 7 on 2026-10-10), FastAPI, Sepolia.
 - **Proposé :** watcher des événements de recovery + alertes push/email/SMS/in-app ; signer Swissquote testnet isolé ; Safe institutionnelle ERC-1271 facultative.
 - **À prouver :** compatibilité Expo/SDK, bon module `After7Days`, `RecoveryExecuted`, `cancelRecovery()` via ClientSafe, confirmation d’alerte, tests négatifs de finalisation précoce, recovery A+B sans banque, transaction ERC-4337 et sponsoring gas.
 

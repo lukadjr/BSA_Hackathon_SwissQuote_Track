@@ -20,7 +20,10 @@
     "test": "vitest run --passWithNoTests",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "sepolia:smoke": "node --import tsx scripts/sepolia-smoke.ts"
+    "sepolia:smoke": "node --import tsx scripts/sepolia-smoke.ts",
+    "recovery:fork-e2e": "node --import tsx scripts/recovery-fork-e2e.ts",
+    "recovery:backend-fork-e2e": "node --import tsx scripts/recovery-backend-fork-e2e.ts",
+    "fork:bundler": "node --import tsx scripts/fork-bundler.ts"
   },
   "devDependencies": {
     "prettier": "3.9.10",

@@ -1,48 +1,35 @@
-"""Authenticated demo metadata API; on-chain ownership and recovery remain unimplemented."""
+"""Authenticated demo API: wallet linking, mock screening and recovery coordination."""
 
 import os
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Annotated
 
 from eth_account import Account
 from eth_account.messages import encode_defunct
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine, inspect
+from pydantic import Field, StringConstraints
+from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy.orm import Session
 
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./swissquote_mock.db")
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-
-class WalletDB(Base):
-    """One row per user: the owner key proven by signature, and the user's Safe."""
-
-    __tablename__ = "wallets"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(String, unique=True, index=True)
-    owner_address = Column(String, nullable=False)
-    safe_address = Column(String, nullable=False)
-    # Set when the owner key signed a link challenge for this owner and Safe.
-    owner_verified_at = Column(DateTime, nullable=False)
-
-
-class LinkChallengeDB(Base):
-    __tablename__ = "link_challenges"
-    id = Column(String, primary_key=True)
-    user_id = Column(String, index=True)
-    owner_address = Column(String)
-    safe_address = Column(String)
-    message = Column(String)
-    expires_at = Column(DateTime)
-    used = Column(Boolean, default=False)
-
+from app.core import (
+    SQLALCHEMY_DATABASE_URL,
+    Address,
+    Base,
+    LinkChallengeDB,
+    StrictRequest,
+    UserId,
+    WalletDB,
+    current_user,
+    engine,
+    find_wallet,
+    get_db,
+    require_user,
+    utcnow,
+)
+from app.recovery import routes as recovery_routes
 
 Base.metadata.create_all(bind=engine)
 _columns = {column["name"] for column in inspect(engine).get_columns("wallets")}
@@ -55,61 +42,11 @@ app = FastAPI(
     title="Swissquote Demo API",
     version="0.1.0",
     description=(
-        "Mock metadata and screening. Wallet linking checks an owner-key signature; "
-        "on-chain Safe ownership and recovery are unimplemented."
+        "Mock metadata and screening. Wallet linking checks an owner-key signature. "
+        "Recovery coordination: guardian invites, approvals, the Swissquote guardian "
+        "signer and a relayer. The chain stays the source of truth."
     ),
 )
-bearer = HTTPBearer(auto_error=False)
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-def current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
-) -> str:
-    # One server-provisioned demo identity. Never mint a session for a caller's user_id.
-    token = os.getenv("MOCK_ACCESS_TOKEN", "")
-    user_id = os.getenv("MOCK_USER_ID", "demo-user")
-    if len(token) < 32 or not user_id.strip():
-        raise HTTPException(status_code=503, detail="Demo authentication is not configured")
-    if credentials is None or not secrets.compare_digest(
-        credentials.credentials.encode(), token.encode()
-    ):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid demo credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return user_id
-
-
-def require_user(user_id: str, authenticated_user: str) -> None:
-    if user_id != authenticated_user:
-        raise HTTPException(status_code=403, detail="Cannot access another user's wallet")
-
-
-def validate_address(value: str) -> str:
-    if int(value[2:], 16) == 0:
-        raise ValueError("The zero address is not allowed")
-    return value.lower()
-
-
-Address = Annotated[
-    str,
-    StringConstraints(pattern=r"^0x[0-9a-fA-F]{40}$"),
-    AfterValidator(validate_address),
-]
-UserId = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
-
-
-class StrictRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
 
 
 class HealthResponse(StrictRequest):
@@ -139,10 +76,6 @@ def wallet_response(wallet: WalletDB) -> dict:
             "owner_verified_at": wallet.owner_verified_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
         },
     }
-
-
-def find_wallet(db: Session, user: str) -> WalletDB | None:
-    return db.query(WalletDB).filter(WalletDB.user_id == user).first()
 
 
 @app.post("/wallets/register")
@@ -202,11 +135,6 @@ def link_message(user_id: str, owner: str, safe: str, nonce: str, expires_at: da
             "This moves no funds.",
         ]
     )
-
-
-def utcnow() -> datetime:
-    # SQLite drops tzinfo, so compare naive UTC values throughout.
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 @app.post("/wallets/link/challenge")
@@ -310,41 +238,8 @@ def screen_transaction(
     return {"status": "approved", "mock": True, "reason": "Passed demo screening only."}
 
 
-class RecoveryRequest(StrictRequest):
-    user_id: UserId
-    safe_address: Address
-    new_owner_address: Address
+app.include_router(recovery_routes.router)
 
-
-def require_recovery_wallet(req: RecoveryRequest, user: str, db: Session) -> None:
-    require_user(req.user_id, user)
-    wallet = find_wallet(db, user)
-    if not wallet:
-        raise HTTPException(status_code=404, detail="Wallet not found for this user")
-    if req.safe_address != wallet.safe_address.lower():
-        raise HTTPException(status_code=409, detail="Safe does not match the registered wallet")
-    if req.new_owner_address == wallet.owner_address.lower():
-        raise HTTPException(status_code=422, detail="Recovery needs a different owner")
-
-
-@app.post("/recovery/request")
-def request_recovery(
-    req: RecoveryRequest,
-    user: Annotated[str, Depends(current_user)],
-    db: Session = Depends(get_db),
-):
-    require_recovery_wallet(req, user, db)
-    raise HTTPException(status_code=501, detail="Recovery case tracking is not implemented")
-
-
-@app.post("/recovery/swissquote-approve")
-def swissquote_guardian_approve(
-    req: RecoveryRequest,
-    user: Annotated[str, Depends(current_user)],
-    db: Session = Depends(get_db),
-):
-    require_recovery_wallet(req, user, db)
-    # A demo session is not identity review or permission to rotate an owner.
-    raise HTTPException(
-        status_code=501, detail="Guardian policy and isolated signer are not implemented"
-    )
+# Optional on-chain watcher (push alerts). Off in tests and by default.
+if os.getenv("RECOVERY_WATCHER_SECONDS", "").isdigit():
+    recovery_routes.start_watcher(max(10, int(os.environ["RECOVERY_WATCHER_SECONDS"])))

@@ -1,5 +1,11 @@
 # guardians
 
-À implémenter : POC D : deux Safes guardians, signatures contractuelles ERC-1271. Ne pas remplacer SQ ET (A OU B) par un seuil plat 2/3.
+Flat **2 of 3** guardians on the Candide recovery module (decided 2026-10-10):
 
-Voir les sections 5–9 et 15 du [README](../../../README.md). Aucun comportement livré ici.
+- **backup**: key derived from the user's 12-word phrase (`createBackupPhrase`,
+  `signApprovalWithPhrase`), never stored on the phone;
+- **Swissquote**: the backend's guardian signer;
+- **friend**: a guardian key created in the friend's own app, added by QR invite.
+
+Any two can recover, including backup + friend without Swissquote. Code lives in
+[`../recovery`](../recovery/README.md); see [docs/recovery.md](../../../docs/recovery.md).

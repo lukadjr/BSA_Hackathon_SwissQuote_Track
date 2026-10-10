@@ -52,8 +52,20 @@ identity by changing `user_id`; those requests return `403`.
 | `POST /wallets/register` | Change the Safe of a wallet whose owner key is already linked; `409` before linking or for another owner key |
 | `GET /wallets/{user_id}` | Read that user's linked wallet; before linking it returns `404` |
 | `POST /transactions/screen` | Mock policy only: blocked test address, high-value review or approved |
-| `POST /recovery/request` | Validate user and registered Safe, then return `501` |
-| `POST /recovery/swissquote-approve` | Validate user and registered Safe, then return `501`; never emit a fake signature |
+| `GET /guardians/swissquote` | Swissquote guardian and relayer public addresses |
+| `POST /guardians/invites` | Owner: create a 15-minute friend invite for the linked Safe (shown as a QR code) |
+| `POST /guardians/invites/{id}/accept` | Friend app: guardian address + signature over the invite message; single use |
+| `GET /guardians/invites/{id}` | Owner: invite status and the friend's guardian address |
+| `GET /guardians/{address}/requests` | Friend app: open recovery requests for Safes it guards |
+| `GET /me/wallet` | New phone: the Safe on file for this customer |
+| `POST /recovery/requests` | Open a recovery case (nonce and guardians read on-chain) and alert the owner |
+| `GET /recovery/requests/{id}` | Case, valid approvals and on-chain status |
+| `POST /recovery/requests/{id}/approvals` | Store a guardian's EIP-712 approval after checking the signer is an on-chain guardian |
+| `POST /recovery/requests/{id}/swissquote-approve` | Mock identity check, then the Swissquote guardian signs |
+| `POST /recovery/requests/{id}/submit` | Relayer sends `multiConfirmRecovery` (starts the 3-day period) |
+| `POST /recovery/requests/{id}/finalize` | Relayer sends `finalizeRecovery` once the period is over |
+| `GET /wallets/{safe}/recovery-status` | Owner phone: pending recovery, open requests, alerts |
+| `POST /alerts/push-token` | Register an Expo push token for the owner's Safe |
 
 Requests reject unknown fields (including private keys), malformed/zero addresses,
 and nonpositive/nonfinite amounts. Amounts use Decimal with six decimal places for
@@ -66,10 +78,13 @@ Linking again replaces the user's single wallet row.
 For the phone, set the app's `EXPO_PUBLIC_DEMO_ACCESS_TOKEN` to this disposable
 demo token; anything in an Expo build is readable, so never reuse a real secret.
 
-Recovery tracking, strengthened identity review, an isolated guardian signer,
-nonce/chain binding and on-chain verification remain separate implementation work.
-The API never claims a recovery was submitted or approved. The intended on-chain
-policy is any two guardians SQ/A/B, including A+B without this backend.
+Recovery coordination is described in [docs/recovery.md](../docs/recovery.md).
+Recovery endpoints need `SEPOLIA_RPC_URL`; the Swissquote guardian and relayer
+keys are created with `python -m app.guardian_policy.signer init` (files under
+`backend/data/`, git-ignored, testnet only). `RECOVERY_WATCHER_SECONDS` enables
+the on-chain watcher that records alerts and sends Expo pushes. The chain stays
+the source of truth: any two guardians, including backup + friend without this
+backend, can recover.
 
 ## Checks
 

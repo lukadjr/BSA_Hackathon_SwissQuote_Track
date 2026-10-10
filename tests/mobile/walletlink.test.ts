@@ -22,6 +22,14 @@ vi.mock('../../apps/mobile/src/lib/linkStatus', () => ({
   markWalletLinked,
   isLinked,
 }));
+// No recovered Safe: the Safe is the one predicted from the owner key.
+vi.mock('../../apps/mobile/src/lib/safeWallet', async () => {
+  const core = await import('@swissquote/wallet-core');
+  return {
+    currentSafeAddress: async (owner: `0x${string}`) =>
+      core.predictSafeAddress(owner),
+  };
+});
 vi.mock('../../apps/mobile/src/lib/wallet', async () => {
   const storage: OwnerKeyStorage = {
     readAddress: async () => memory.address as `0x${string}` | null,

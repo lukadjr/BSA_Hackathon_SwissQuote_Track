@@ -2,7 +2,8 @@
 // addresses, challenge ids and signatures. Never send a private key.
 import type { Address, Signature } from './wallet';
 
-const REQUEST_TIMEOUT_MS = 10_000;
+// Phones on busy Wi-Fi (or reaching the Mac by its .local name) can be slow.
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export type ApiErrorCode =
   | 'NOT_CONFIGURED'
@@ -52,10 +53,11 @@ function config() {
   return { baseUrl: baseUrl.replace(/\/+$/, ''), token };
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
   body: unknown,
   signal?: AbortSignal,
+  method: 'GET' | 'POST' = 'POST',
 ): Promise<T> {
   const { baseUrl, token } = config();
   const controller = new AbortController();
@@ -66,13 +68,13 @@ async function request<T>(
   let response: Response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
-      method: 'POST',
+      method,
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(body),
+      body: method === 'GET' ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
   } catch {

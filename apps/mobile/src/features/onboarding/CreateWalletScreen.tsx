@@ -42,6 +42,16 @@ export default function CreateWalletScreen() {
           if (!busy) void onCreate();
         }}
       />
+      <Button
+        label="I lost my phone: recover my wallet"
+        secondary
+        onPress={() => router.push('/recover')}
+      />
+      <Button
+        label="Help a friend: be a guardian"
+        secondary
+        onPress={() => router.push('/guardian')}
+      />
     </Screen>
   );
 }

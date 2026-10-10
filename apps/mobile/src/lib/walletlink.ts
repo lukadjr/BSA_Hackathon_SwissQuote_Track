@@ -7,7 +7,8 @@ import { ApiError, completeLink, requestLinkChallenge } from './api';
 import type { LinkChallenge, LinkResult } from './api';
 import { isLinked, markWalletLinked } from './linkStatus';
 import { describeWalletError, getAddress, signMessage } from './wallet';
-import { predictSafeAddress, WalletError } from '@swissquote/wallet-core';
+import { WalletError } from '@swissquote/wallet-core';
+import { currentSafeAddress } from './safeWallet';
 
 export type { LinkChallenge, LinkResult };
 
@@ -19,7 +20,7 @@ function sameAddress(a: string, b: string) {
 export async function isWalletLinkComplete(): Promise<boolean> {
   const owner = await getAddress();
   if (owner === null) return false;
-  return isLinked(owner, predictSafeAddress(owner));
+  return isLinked(owner, await currentSafeAddress(owner));
 }
 
 /** Fetch a challenge naming the owner key and its Safe. Nothing is signed yet. */
@@ -30,7 +31,7 @@ export async function startWalletLink(
   if (address === null) {
     throw new WalletError('WALLET_NOT_FOUND', 'No owner wallet exists.');
   }
-  const safe = predictSafeAddress(address);
+  const safe = await currentSafeAddress(address);
   const challenge = await requestLinkChallenge(address, safe, signal);
   // Only show (and later sign) a challenge about this phone's own key and Safe.
   const text = challenge.message.toLowerCase();

@@ -14,6 +14,7 @@ import {
 } from 'viem';
 import { sepolia } from 'viem/chains';
 import { WalletError } from '../errors';
+import { isRecoveryModule } from '../recovery/module';
 
 // Versioned together with abstractionkit 0.4.0. No environment overrides for
 // contracts/salt: changing any of them could strand a prefunded account.
@@ -103,6 +104,35 @@ export function sepoliaClient(config: SepoliaConfig) {
 }
 export type SepoliaClient = ReturnType<typeof sepoliaClient>;
 
+// The 4337 module is required; the only other module allowed is one pinned
+// Candide recovery module (enabled by the "Protect wallet" batch).
+function allowedModules(modules: readonly Address[]): boolean {
+  const others = modules.filter(
+    (m) => !isAddressEqual(m, SAFE_DEPLOYMENT.module),
+  );
+  return (
+    modules.length === others.length + 1 &&
+    others.length <= 1 &&
+    others.every(isRecoveryModule)
+  );
+}
+
+/** The enabled recovery module, or null when the Safe is not protected yet. */
+export async function readRecoveryModule(
+  client: SepoliaClient,
+  safe: Address,
+): Promise<Address | null> {
+  const code = await client.getCode({ address: safe });
+  if (!code || code === '0x') return null;
+  const [modules] = await client.readContract({
+    address: safe,
+    abi: safeAbi,
+    functionName: 'getModulesPaginated',
+    args: [SENTINEL, 10n],
+  });
+  return modules.find((m) => isRecoveryModule(m)) ?? null;
+}
+
 export async function verifySafe(
   client: SepoliaClient,
   safe: Address,
@@ -152,8 +182,7 @@ export async function verifySafe(
     !isAddressEqual(owners[0], owner) ||
     threshold !== 1n ||
     version !== SAFE_DEPLOYMENT.safeVersion ||
-    modules[0].length !== 1 ||
-    !isAddressEqual(modules[0][0], SAFE_DEPLOYMENT.module) ||
+    !allowedModules(modules[0]) ||
     !isAddressEqual(modules[1], SENTINEL) ||
     !isAddressEqual(storedAddress(singleton), SAFE_DEPLOYMENT.singleton) ||
     !isAddressEqual(storedAddress(handler), SAFE_DEPLOYMENT.module)

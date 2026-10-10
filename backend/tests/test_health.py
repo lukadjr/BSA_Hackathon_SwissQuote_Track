@@ -19,7 +19,7 @@ NEW_OWNER = "0x" + "3" * 40
 TOKEN = "test-only-demo-token-" + "x" * 32
 HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 REGISTRATION = {"user_id": "alice", "safe_address": SAFE, "owner_address": OWNER}
-RECOVERY = {"user_id": "alice", "safe_address": SAFE, "new_owner_address": NEW_OWNER}
+RECOVERY = {"safe_address": SAFE, "new_owner_address": NEW_OWNER}
 
 
 @pytest.fixture
@@ -93,7 +93,8 @@ def test_business_routes_require_valid_credentials(client):
         == 401
     )
     assert client.get("/wallets/alice").status_code == 401
-    assert client.post("/recovery/swissquote-approve", json=RECOVERY).status_code == 401
+    assert client.post("/recovery/requests", json=RECOVERY).status_code == 401
+    assert client.get("/guardians/swissquote").status_code == 401
 
 
 def test_wallet_exists_only_after_linking(client):
@@ -132,7 +133,11 @@ def test_cannot_read_overwrite_or_recover_another_users_wallet(client, monkeypat
     monkeypatch.setenv("MOCK_USER_ID", "bob")
     assert client.get("/wallets/alice", headers=HEADERS).status_code == 403
     assert client.post("/wallets/register", json=REGISTRATION, headers=HEADERS).status_code == 403
-    assert client.post("/recovery/request", json=RECOVERY, headers=HEADERS).status_code == 403
+    assert client.post("/recovery/requests", json=RECOVERY, headers=HEADERS).status_code == 404
+    assert (
+        client.post("/guardians/invites", json={"safe_address": SAFE}, headers=HEADERS).status_code
+        == 404
+    )
     monkeypatch.setenv("MOCK_USER_ID", "alice")
     assert client.get("/wallets/alice", headers=HEADERS).json()["data"]["owner_address"] == OWNER
 
@@ -187,32 +192,6 @@ def test_screening_validates_address_and_distinguishes_mock_outcomes(client):
     assert result["mock"] is True
 
 
-@pytest.mark.parametrize("path", ["/recovery/request", "/recovery/swissquote-approve"])
-def test_recovery_fails_closed_and_requires_matching_registry(client, path):
-    assert client.post(path, json=RECOVERY, headers=HEADERS).status_code == 404
-    link(client)
-    assert (
-        client.post(path, json={**RECOVERY, "safe_address": NEW_OWNER}, headers=HEADERS).status_code
-        == 409
-    )
-    assert (
-        client.post(
-            path, json={**RECOVERY, "new_owner_address": OWNER}, headers=HEADERS
-        ).status_code
-        == 422
-    )
-    assert (
-        client.post(
-            path, json={**RECOVERY, "new_owner_address": "invalid"}, headers=HEADERS
-        ).status_code
-        == 422
-    )
-    response = client.post(path, json=RECOVERY, headers=HEADERS)
-    assert response.status_code == 501
-    assert "signature" not in response.json()
-    assert "approved" not in response.json()
-
-
 def test_documented_routes(client):
     assert set(client.get("/openapi.json").json()["paths"]) == {
         "/health",
@@ -221,8 +200,20 @@ def test_documented_routes(client):
         "/wallets/link/challenge",
         "/wallets/link/complete",
         "/transactions/screen",
-        "/recovery/request",
-        "/recovery/swissquote-approve",
+        "/alerts/push-token",
+        "/guardians/swissquote",
+        "/guardians/invites",
+        "/guardians/invites/{invite_id}",
+        "/guardians/invites/{invite_id}/accept",
+        "/guardians/{guardian_address}/requests",
+        "/recovery/requests",
+        "/recovery/requests/{case_id}",
+        "/recovery/requests/{case_id}/approvals",
+        "/recovery/requests/{case_id}/swissquote-approve",
+        "/recovery/requests/{case_id}/submit",
+        "/recovery/requests/{case_id}/finalize",
+        "/wallets/{safe_address}/recovery-status",
+        "/me/wallet",
     }
 
 

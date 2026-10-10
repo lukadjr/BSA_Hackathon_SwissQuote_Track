@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { describeWalletError, getAddress } from '../lib/wallet';
+import { readPendingRecovery } from '../lib/recovery';
 import { isWalletLinkComplete } from '../lib/walletlink';
 
 export default function Startup() {
@@ -13,6 +14,8 @@ export default function Startup() {
     let active = true;
     getAddress()
       .then(async (address) => {
+        // A recovery started on this phone resumes until it is finished.
+        if (await readPendingRecovery()) return '/recover' as const;
         if (!address) return '/create-wallet' as const;
         // Onboarding is complete only once the new wallet is linked.
         return (await isWalletLinkComplete())
