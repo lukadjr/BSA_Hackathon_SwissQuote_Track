@@ -9,6 +9,8 @@ import { useOwnerAddress } from '../../hooks/useOwnerAddress';
 import { resetWalletForDev } from '../../lib/devReset';
 import { describeWalletError } from '../../lib/wallet';
 import { getSafeAccount } from '../../lib/safeWallet';
+import { useSecurityState } from '../../hooks/useSecurityState';
+import { RecoveryAlert, RequestedAlert } from '../recovery/RecoveryAlert';
 
 function confirmDevReset() {
   Alert.alert(
@@ -36,6 +38,7 @@ export default function WalletScreen() {
   const [account, setAccount] = useState<SafeAccountInfo | null>(null);
   const [chainError, setChainError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const security = useSecurityState();
   useFocusEffect(
     useCallback(() => {
       setAttempt((value) => value + 1);
@@ -62,6 +65,30 @@ export default function WalletScreen() {
   }, [attempt]);
   return (
     <Screen>
+      {security.state && (
+        <RecoveryAlert state={security.state} onChanged={security.refresh} />
+      )}
+      {security.state && (
+        <RequestedAlert
+          state={security.state}
+          status={security.status}
+          onChanged={security.refresh}
+        />
+      )}
+      {security.state && !security.state.recovery && (
+        <View className="bg-white border border-accent rounded-3xl p-6 gap-3">
+          <Text className="text-lg font-semibold text-ink">
+            Protect your wallet
+          </Text>
+          <Text className="text-base text-muted">
+            Add 3 guardians so you can recover it if you lose this phone.
+          </Text>
+          <Button
+            label="Set up recovery"
+            onPress={() => router.push('/protect')}
+          />
+        </View>
+      )}
       <View className="rounded-3xl bg-ink p-6 gap-3">
         <Text className="text-white text-sm">Safe test-token balance</Text>
         <Text className="text-white text-4xl font-bold">
@@ -140,9 +167,12 @@ export default function WalletScreen() {
           onPress={confirmDevReset}
         />
       )}
-      <Text className="text-sm text-muted">
-        Sepolia testnet only. Recovery is not configured for this milestone.
-      </Text>
+      <Button
+        label="Be a guardian for a friend"
+        secondary
+        onPress={() => router.push('/guardian')}
+      />
+      <Text className="text-sm text-muted">Sepolia testnet only.</Text>
     </Screen>
   );
 }

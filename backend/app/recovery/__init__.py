@@ -1,1 +1,1 @@
-"""À implémenter : Dossiers et coordination ; la rotation et les approvals restent on-chain."""
+"""Recovery coordination; approvals, the grace period and rotation stay on-chain."""

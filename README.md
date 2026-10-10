@@ -5,6 +5,21 @@
 > **Plateformes :** iOS / Android · **Réseau cible :** Ethereum Sepolia (`chainId: 11155111`).  
 > **Langues :** application et pitch potentiellement en anglais ; documentation technique en français.
 
+## Implémentation actuelle (10 octobre 2026)
+
+Les branches KYC et add-money sont intégrées avec le recovery de `origin/main`.
+Le parcours mobile normal utilise **une seule trésorerie Swissquote** pour déployer,
+alimenter et relayer les transactions Safe, y compris le recovery. Les clés client
+restent sur le téléphone ; `gasPrice=0` dans la signature Safe interdit tout
+remboursement prélevé sur la Safe. Délai normal : **3 jours**, module 3 minutes
+séparé pour démos. Le chemin ERC-4337 reste un outil de test alternatif.
+
+Tests réalisés : contrats Safe/Candide réels sur EVM local, client/Safe à zéro ETH,
+signatures TypeScript → API Python, financement, transfert, rotation guardian,
+annulation et récupération avec délais 3 minutes/3 jours. Le build Xcode, la
+biométrie réelle et la validation financée sur Sepolia restent à faire sur iPhone.
+Voir [le plan et les limites](docs/gasless-implementation-plan.md).
+
 ## Sommaire
 
 1. [Vision et périmètre](#1-vision-et-périmètre)
@@ -13,7 +28,7 @@
 4. [Tech stack détaillée](#4-tech-stack-détaillée)
 5. [Modèle de custody et gestion des clés](#5-modèle-de-custody-et-gestion-des-clés)
 6. [Organisation des comptes Safe et des guardians](#6-organisation-des-comptes-safe-et-des-guardians)
-7. [Recovery 2/3, alertes et annulation pendant 7 jours](#7-recovery-23-alertes-et-annulation-pendant-7-jours)
+7. [Recovery 2/3, alertes et annulation pendant 3 jours](#7-recovery-23-alertes-et-annulation-pendant-3-jours)
 8. [Pertes, compromissions et rotation des guardians](#8-pertes-compromissions-et-rotation-des-guardians)
 9. [Flux produit et blockchain](#9-flux-produit-et-blockchain)
 10. [Backend et API](#10-backend-et-api)
@@ -44,16 +59,16 @@ La proposition de valeur est : **« Your keys. Your crypto. Swissquote by your s
 - **Safe Smart Account individuelle** : les cryptomonnaies du client résident à l'adresse de la Safe, pas à celle de l'EOA de signature.
 - **Signature locale après confirmation transactionnelle et authentification Face ID / Touch ID / biométrie forte Android** (ou mode de secours explicitement choisi et testé) **à chaque demande de signature**. Le déverrouillage visuel de l’app seul est insuffisant.
 - **Recovery assisté sans phrase de récupération pour le parcours courant** : remplacement de l’EOA owner par une nouvelle EOA avec module social recovery. **Continuité sans Swissquote :** les guardians A+B peuvent initier le recovery sans banque ; une sauvegarde hors appareil contrôlée par le client (par ex. phrase BIP-39 standard) fournit une voie supplémentaire de restauration de la même EOA.
-- **Recovery 2-sur-3 classique : Swissquote est un guardian optionnel**, aux côtés de Guardian A et Guardian B. Deux approvals indépendantes suffisent, avec **7 jours de contestation on-chain** pendant lesquels l’owner actuel peut annuler. Le client peut ainsi récupérer via A+B sans Swissquote. Le Recovery Kit hors appareil reste une voie indépendante utile si les guardians ne répondent pas.
-- **Gasless ERC-20** via ERC-4337 + paymaster lorsque le sponsoring est disponible.
+- **Recovery 2-sur-3 classique : Swissquote est un guardian optionnel**, aux côtés de Guardian A et Guardian B. Deux approvals indépendantes suffisent, avec **3 jours de contestation on-chain** pendant lesquels l’owner actuel peut annuler. Le client peut ainsi récupérer via A+B sans Swissquote. Le Recovery Kit hors appareil reste une voie indépendante utile si les guardians ne répondent pas.
+- **Gasless ERC-20** via transactions Safe signées localement, soumises par la trésorerie Swissquote qui paie les frais. Aucun paymaster ni bundler requis pour ce parcours.
 - **Architecture bancaire crédible** : contrôle d'identité renforcé, suivi, traçabilité et compliance ; intégrations bancaires **simulées** pour le hackathon.
 - **UX mobile premium** ; la complexité EOA/Safe/4337 reste cachée dans le parcours courant.
 
 ### Parcours de démonstration prioritaire
 
-`Create → Protect + Backup → Fund → Face ID → Sign & Send → Lose Access → Recover (any 2/3) → 7-day challenge period → Finalize → Sign again`
+`Create → Protect + Backup → Fund → Face ID → Sign & Send → Lose Access → Recover (any 2/3) → 3-day challenge period → Finalize → Sign again`
 
-**Scénario exigé par le brief (banque disparue) :** `Swissquote permanently unavailable → Guardian A + Guardian B recover the Safe on-chain → wait 7 days → new owner operates independently`. Alternative : restaurer l’EOA d’origine depuis un Recovery Kit hors ligne si encore valable. Démontrer une voie RPC/bundler indépendante et la disponibilité des fonds sans FastAPI Swissquote.
+**Scénario exigé par le brief (banque disparue) :** `Swissquote permanently unavailable → Guardian A + Guardian B recover the Safe on-chain → wait 3 days → new owner operates independently`. Alternative : restaurer l’EOA d’origine depuis un Recovery Kit hors ligne si encore valable. Démontrer une voie RPC/bundler indépendante et la disponibilité des fonds sans FastAPI Swissquote.
 
 ### Hors périmètre initial
 
@@ -81,7 +96,7 @@ Il s'agit d'un **prototype sur testnet**, non d'une application bancaire ou d'un
 | Owner ordinaire Safe client | EOA client, seuil `1/1` | **Retenu** |
 | Recovery principal | **2 approvals sur 3 : Swissquote, Guardian A, Guardian B** | **Décidé** |
 | Implémentation recovery | Candide Social Recovery Module, seuil `2/3` **à plat** | **POC on-chain** |
-| Délai de rotation | **7 jours on-chain**, `After7Days` | **Décidé ; à tester** |
+| Délai de rotation | **3 jours on-chain**, `After7Days` | **Décidé ; à tester** |
 | Opposition du propriétaire | Transaction Safe signée par l’EOA actuelle → `cancelRecovery()` avant `executeAfter` | **Décidé ; à tester** |
 | Alertes de recovery | Événements on-chain + push Expo + email/SMS + tableau de bord | **Prévu ; livraison non garantie par un seul canal** |
 | Guardian Swissquote | EOA de test dans un service séparé ; Safe institutionnelle `2/3` facultative en production | **MVP simplifié / option institutionnelle** |
@@ -93,7 +108,7 @@ Il s'agit d'un **prototype sur testnet**, non d'une application bancaire ou d'un
 | Réseau | Sepolia | **Retenu** |
 | Base de données | SQLite pour métadonnées de prototype | **Retenu** |
 
-**Contrainte de custody :** deux guardians quelconques, y compris **Swissquote + A** ou **A + B**, peuvent collectivement proposer une nouvelle clé owner et, après 7 jours sans annulation, acquérir le contrôle de la Safe. Swissquote ne peut pas agir seule, mais une **collusion avec un autre guardian** demeure une zone grise juridique (custody partagée). Le délai donne à l’owner encore opérationnel une possibilité d’opposition, **pas un veto absolu**, puisqu’il peut avoir perdu sa clé.
+**Contrainte de custody :** deux guardians quelconques, y compris **Swissquote + A** ou **A + B**, peuvent collectivement proposer une nouvelle clé owner et, après 3 jours sans annulation, acquérir le contrôle de la Safe. Swissquote ne peut pas agir seule, mais une **collusion avec un autre guardian** demeure une zone grise juridique (custody partagée). Le délai donne à l’owner encore opérationnel une possibilité d’opposition, **pas un veto absolu**, puisqu’il peut avoir perdu sa clé.
 
 ---
 
@@ -121,7 +136,7 @@ flowchart TB
         SQ -->|approval possible| REC
         A -->|approval possible| REC
         B -->|approval possible| REC
-        REC -->|rotation après 7 jours sans annulation| SAFE
+        REC -->|rotation après 3 jours sans annulation| SAFE
         SAFE -->|cancelRecovery via exécution Safe| REC
     end
 
@@ -139,7 +154,7 @@ flowchart TB
     MON -.->|lecture on-chain| REC
 ```
 
-> **Garanties réelles vs fonctionnalités visées :** la période de 7 jours est imposée par le module on-chain sélectionné. Les alertes dépendent de services off-chain et **ne sont jamais garanties d'être reçues**. Leur absence n'arrête pas le délai.
+> **Garanties réelles vs fonctionnalités visées :** la période de 3 jours est imposée par le module on-chain sélectionné. Les alertes dépendent de services off-chain et **ne sont jamais garanties d'être reçues**. Leur absence n'arrête pas le délai.
 
 > **Sortie sans Swissquote :** Guardian A et Guardian B peuvent satisfaire directement le seuil 2/3 sur le contrat, à condition d'accéder à une infrastructure blockchain indépendante. Une copie hors ligne de l'EOA encore owner constitue également une voie autonome distincte.
 
@@ -341,15 +356,15 @@ Les guardians ne sont **pas** des owners normaux : ils n'autorisent pas les paie
 
 | Approbations | Seuil atteint ? | Rotation immédiate ? |
 |---|---|---|
-| Swissquote + A | ✅ | ❌ 7 jours de contestation |
-| Swissquote + B | ✅ | ❌ 7 jours de contestation |
-| A + B, **sans Swissquote** | ✅ | ❌ 7 jours de contestation |
+| Swissquote + A | ✅ | ❌ 3 jours de contestation |
+| Swissquote + B | ✅ | ❌ 3 jours de contestation |
+| A + B, **sans Swissquote** | ✅ | ❌ 3 jours de contestation |
 | Swissquote seule / A seul / B seul | ❌ | ❌ |
-| Swissquote + A + B | ✅ | ❌ 7 jours de contestation |
+| Swissquote + A + B | ✅ | ❌ 3 jours de contestation |
 
 ### 6.4 Choix du module et délai
 
-Candide expose un sélecteur de période **préconfigurée**. Choisir explicitement le module déployé à sept jours, et vérifier son adresse et sa période effective sur Sepolia :
+Candide expose un sélecteur de période **préconfigurée**. Choisir explicitement le module déployé à trois jours, et vérifier son adresse et sa période effective sur Sepolia :
 
 ```typescript
 import {
@@ -361,14 +376,14 @@ const recovery = new SocialRecoveryModule(
   SocialRecoveryModuleGracePeriodSelector.After7Days
 );
 // Important : utiliser cette instance pour configurer ET interroger le module.
-// Ne pas supposer que le délai par défaut (3 jours) est de 7 jours.
+// Ne pas supposer que le délai par défaut (3 jours) est de 3 jours.
 ```
 
 La durée n'est **pas** un `setTimeout()` JavaScript ou un compteur dans FastAPI : le smart contract stocke `executeAfter = block.timestamp + recoveryPeriod` et `finalizeRecovery()` interdit la finalisation anticipée. Les signatures des guardians ne changent jamais directement l'owner.
 
 ---
 
-## 7. Recovery 2/3, alertes et annulation pendant 7 jours
+## 7. Recovery 2/3, alertes et annulation pendant 3 jours
 
 ### 7.1 Déroulement normal
 
@@ -385,7 +400,7 @@ sequenceDiagram
     Client->>App: Génère EOA_B et prépare la demande
     App->>G: Signer même recovery hash (Safe, owners, threshold, nonce)
     G-->>RM: Deux approvals valides
-    RM->>RM: executeRecovery : démarrage délai de 7 jours
+    RM->>RM: executeRecovery : démarrage délai de 3 jours
     RM-->>W: Event RecoveryExecuted(safe, executeAfter)
     W-->>O: Push + email/SMS + affichage in-app
     alt Owner actuel détecte une fraude ET possède encore sa clé
@@ -402,7 +417,7 @@ sequenceDiagram
 
 1. Un appareil neuf génère localement `EOA_B` et crée une demande de recovery, contenant Safe, nouveaux owners, nouveau seuil, chain et nonce dans le **format réel de Candide**.
 2. **Deux guardians quelconques** signent exactement la même demande : `SQ+A`, `SQ+B` ou `A+B`.
-3. L'appel `executeRecovery(...)` / `multiConfirmRecovery(..., execute=true)` est inclus sur blockchain : événement **`RecoveryExecuted`**, `executeAfter` enregistré. **C'est le début des 7 jours** (pas la première approval hors chaîne).
+3. L'appel `executeRecovery(...)` / `multiConfirmRecovery(..., execute=true)` est inclus sur blockchain : événement **`RecoveryExecuted`**, `executeAfter` enregistré. **C'est le début des 3 jours** (pas la première approval hors chaîne).
 4. Le watcher observe et confirme l'événement ; alertes multi-canaux, suivi visible dans l'application et sur l'explorateur. Montrer la **nouvelle adresse owner**, les guardians ayant autorisé et une date butoir lue depuis la chaîne.
 5. Jusqu'à `executeAfter`, **l'owner actuellement autorisé** peut faire appeler `cancelRecovery()` par `ClientSafe` : il signe une opération normale avec son EOA et son déverrouillage Face ID/biométrique ; les frais doivent être pris en charge par un paymaster ou un parcours de paiement indépendant.
 6. Une fois la transaction d'annulation confirmée, le module supprime la demande et émet **`RecoveryCanceled`**. Le tableau de bord passe à *Canceled*. Si l'annulation n'est pas confirmée à temps, **aucune promesse de réussite**.
@@ -448,7 +463,7 @@ const metaTx = {
 - **Service Candide Recovery UX API** (option) : fonctionnalités de souscription email/SMS signée par l'owner via SIWE, statut et alertes. **Nécessite un accès au service et son support effectif pour le réseau**, donc prévoir un watcher autonome si indisponible.
 - **Journaux/audit** : enregistrer en base les événements, tentatives d'alertes, éventuels retours d'envoi, et confirmations d'annulation. Un accusé de réception d'une push **ne prouve pas** que le client a vu le message.
 
-**Politique d'alerte proposée (produit, pas propriété du contrat) :** alerter dès la première demande côté backend et au début de la période on-chain ; relancer durant les 7 jours si non annulé ; signaler les dernières 24 heures ; notifier toute annulation ou finalisation. **Aucun canal ne doit être l'unique protection.**
+**Politique d'alerte proposée (produit, pas propriété du contrat) :** alerter dès la première demande côté backend et au début de la période on-chain ; relancer durant les 3 jours si non annulé ; signaler les dernières 24 heures ; notifier toute annulation ou finalisation. **Aucun canal ne doit être l'unique protection.**
 
 ### 7.4 Cas où le client a réellement perdu sa clé
 
@@ -461,8 +476,8 @@ Après une tentative malveillante annulée, révoquer/remplacer rapidement les g
 ### 7.5 Démo hackathon vs paramètre cible
 
 - **Architecture cible :** `After7Days`, testé on-chain, et capture de `executeAfter` réelle.
-- **Démo accélérée sur Safe de test distincte :** sélecteur `After3Minutes` uniquement si nécessaire pour montrer **create → sign → recover** dans la durée de l'événement. La démo doit afficher clairement « Demo period: 3 minutes » et expliquer qu'un déploiement à 7 jours utilise **un module/adresse différente**, pas un timeout local.
-- **Tester impérativement l'annulation** sur une Safe avec `After7Days` sur Sepolia (pas besoin d'attendre 7 jours pour prouver la cancellation). Tester séparément la finalisation avec `After3Minutes`.
+- **Démo accélérée sur Safe de test distincte :** sélecteur `After3Minutes` uniquement si nécessaire pour montrer **create → sign → recover** dans la durée de l'événement. La démo doit afficher clairement « Demo period: 3 minutes » et expliquer qu'un déploiement à 3 jours utilise **un module/adresse différente**, pas un timeout local.
+- **Tester impérativement l'annulation** sur une Safe avec `After7Days` sur Sepolia (pas besoin d'attendre 3 jours pour prouver la cancellation). Tester séparément la finalisation avec `After3Minutes`.
 
 ---
 
@@ -479,7 +494,7 @@ Après une tentative malveillante annulée, révoquer/remplacer rapidement les g
 | Un des guardians personnels perdu et Swissquote disparue | ❌ si plus que **un** guardian sur trois peut signer | Backup de l'EOA owner ou mise à jour préventive des guardians |
 | Deux guardians perdus et EOA client encore valide | Le client conserve les dépenses normales, mais ne peut plus compter sur recovery | Remplacer les guardians tant que l'owner fonctionne |
 | Deux guardians perdus ET EOA client perdue | ❌ Par recovery | Un Recovery Kit de l’EOA encore owner peut aider s'il existe |
-| EOA client perdue, deux guardians disponibles | ✅ après 7 jours + finalisation | Nouvelle EOA puis rotation |
+| EOA client perdue, deux guardians disponibles | ✅ après 3 jours + finalisation | Nouvelle EOA puis rotation |
 | EOA compromise / attaquant possède la clé | Recovery ne gèle pas les dépenses ni ne garantit la révocation | Procédure d'urgence et protections on-chain spécifiques si prévues |
 
 ### 8.2 Maintenance des guardians
@@ -489,11 +504,11 @@ Après une tentative malveillante annulée, révoquer/remplacer rapidement les g
 - **Clés compromises :** éviter le stockage partagé des clés guardians, révoquer rapidement toute clé exposée, annoncer les changements à l'utilisateur.
 - **Swissquote en production :** option d'une Safe institutionnelle `2/3` avec 3 signers réellement indépendants, sans modifier le seuil externe de `ClientSafe` ; cette variante nécessite des tests ERC-1271 spécifiques mais ne bloque plus le prototype.
 
-### 8.3 Menaces spécifiques au délai de sept jours
+### 8.3 Menaces spécifiques au délai de trois jours
 
 - **Notification manquée ou supprimée** : délai court quand même ; prévoir canaux multiples et surveillance RPC indépendante.
 - **Backend Swissquote hors service** : ni les guardians A+B ni l'annulation via une interface blockchain indépendante ne doivent dépendre de FastAPI.
-- **Attaquant avec EOA actuelle** : peut vider le compte ou interrompre un recovery légitime ; 7 jours **ne protègent pas** contre cette compromission.
+- **Attaquant avec EOA actuelle** : peut vider le compte ou interrompre un recovery légitime ; 3 jours **ne protègent pas** contre cette compromission.
 - **Annulation non incluse à temps** : confirmer la transaction on-chain avant échéance ; UX doit afficher les échecs et délais de soumission, sans résultat fictif.
 - **Deux guardians collusifs** : peuvent remplacer l'owner après délai si l'owner ne peut pas annuler ; c'est le compromis du modèle 2/3.
 
@@ -631,7 +646,7 @@ AuditEvent(id, case_id, actor, action, timestamp, metadata)
 | Téléphone déverrouillé / malware / JS compromis | Signature frauduleuse, potentielle exposition du secret | UI explicite, revue des dépendances, build contrôlé, authentification | SecureStore n'isole pas totalement le secret en mémoire |
 | Perte complète de `ClientEOA` | Lockout | Recovery 2/3 sans dépendance obligatoire à Swissquote | Échec si moins de 2 guardians actifs |
 | Compromission email ou session bancaire | Recovery frauduleux | Vérification d'identité supplémentaire, second guardian indépendant | KYC mock n'est pas une garantie réelle |
-| Collusion de deux guardians (SQ+A, SQ+B **ou A+B**) | Remplacement frauduleux de l’owner après 7 jours | Timelock on-chain, alertes multi-canaux, bouton d’annulation signé | Si clé owner perdue/compromise ou alertes non reçues, recovery peut aboutir |
+| Collusion de deux guardians (SQ+A, SQ+B **ou A+B**) | Remplacement frauduleux de l’owner après 3 jours | Timelock on-chain, alertes multi-canaux, bouton d’annulation signé | Si clé owner perdue/compromise ou alertes non reçues, recovery peut aboutir |
 | Swissquote indisponible / définitivement disparue | Le guardian Swissquote ne signe plus | Guardian A + Guardian B récupèrent sans banque ; sinon Recovery Kit EOA | Si A/B ou kit inaccessible, l’owner peut rester bloqué |
 | Bug / module Safe dangereux | Dépenses non autorisées ou blocage | Contrats réputés, revue des permissions, version pinning, tests | Absence d'audit projet |
 | Payload backend/RPC malveillant | Signature du mauvais montant/contrat | Décodage et vérification locale ; allowlists | UX doit empêcher les signatures opaques |
@@ -654,7 +669,7 @@ AuditEvent(id, case_id, actor, action, timestamp, metadata)
 
 - **Pas de veto bancaire :** si Swissquote refuse ou disparaît, A+B peuvent valider le recovery. Une seule clé guardian perdue n’empêche pas la récupération, mais deux clés guardian indisponibles l’empêchent.
 - **Absence de garantie de restitution des fonds :** un owner EOA compromis peut vider `ClientSafe` avant le recovery.
-- **Risque de collusion :** n’importe quels deux guardians parmi SQ, A et B peuvent initier la rotation. La période de sept jours est contestable seulement si le propriétaire dispose toujours d’une signature owner valide.
+- **Risque de collusion :** n’importe quels deux guardians parmi SQ, A et B peuvent initier la rotation. La période de trois jours est contestable seulement si le propriétaire dispose toujours d’une signature owner valide.
 - **Governance :** le propriétaire peut modifier les guardians selon les permissions du module ; Swissquote n’est ni obligatoire ni immuable. La politique de notification des changements de guardian doit être testée.
 - **Sécurité du code mobile :** des mises à jour malveillantes ou un appareil compromis peuvent attaquer le flux de signature ; les sauvegardes et la biométrie ne constituent pas une preuve de sécurité parfaite.
 - **Legal :** la qualification self-custodial/non-custodial et les responsabilités suisses dépendent des droits effectivement accordés et d'une analyse juridique ; aucune homologation n'est revendiquée.
@@ -669,13 +684,13 @@ La track demande explicitement de répondre à **« could Swissquote, alone or t
 |---|---|---|
 | Swissquote seule | Ne peut pas satisfaire le recovery 2/3, ni exécuter une dépense normale | Pas de contrôle unilatéral |
 | Guardian A seul / B seul | Ne peut pas satisfaire le recovery 2/3 | Pas de contrôle unilatéral |
-| Swissquote + A **ou** B | Peut proposer un nouvel owner ; après 7 jours sans cancellation on-chain, finalisation autorisée | **Pouvoir collectif indirect sur les fonds** |
-| **Guardian A + Guardian B, sans Swissquote** | Peut également proposer un nouvel owner après 7 jours ; pas de dépendance à la banque | Résilience accrue mais **collusion personnelle possible** |
+| Swissquote + A **ou** B | Peut proposer un nouvel owner ; après 3 jours sans cancellation on-chain, finalisation autorisée | **Pouvoir collectif indirect sur les fonds** |
+| **Guardian A + Guardian B, sans Swissquote** | Peut également proposer un nouvel owner après 3 jours ; pas de dépendance à la banque | Résilience accrue mais **collusion personnelle possible** |
 | Client via EOA valide / restauration de son Recovery Kit | Autorise les dépenses normales ou la gestion de la Safe sans Swissquote | Autonomie opérationnelle tant que la clé utilisateur demeure accessible |
 
 Le **legal primer officiel** décrit cette situation de contrôle partagé banque + tiers comme **zone grise**, pas comme une validation automatique du modèle « non-custodial ». Il faut qualifier la wallet de **client-controlled smart account with assisted shared-power recovery**, et **non** de produit juridiquement attesté *non-custodial*. Il faudrait notamment examiner les règles bancaires/AML, les droits réels des modules, la gouvernance et les conditions de responsabilité/insolvabilité pour une offre réelle. FINMA Guidance 01/2026 traite des responsabilités et risques de la custody de cryptoactifs, mais **ne valide pas individuellement notre système**.
 
-**Décision produit assumée :** Swissquote **n’a aucun droit de veto** sur la récupération par guardians. A+B permettent une récupération sans banque, et le Recovery Kit demeure une sauvegarde supplémentaire. Toutefois la banque **avec un tiers**, ou les **deux guardians personnels**, peuvent obtenir le contrôle après un délai de 7 jours si l’owner n’annule pas. Cela nécessite une analyse juridique du pouvoir partagé ; le délai n’équivaut pas à une approbation explicite du client.
+**Décision produit assumée :** Swissquote **n’a aucun droit de veto** sur la récupération par guardians. A+B permettent une récupération sans banque, et le Recovery Kit demeure une sauvegarde supplémentaire. Toutefois la banque **avec un tiers**, ou les **deux guardians personnels**, peuvent obtenir le contrôle après un délai de 3 jours si l’owner n’annule pas. Cela nécessite une analyse juridique du pouvoir partagé ; le délai n’équivaut pas à une approbation explicite du client.
 
 ### 11.6 Travel Rule et vérification de la wallet — intégration prototype
 
@@ -711,7 +726,7 @@ Le **legal primer officiel** décrit cette situation de contrôle partagé banqu
 - Le client voit **une wallet**, correspondant à `ClientSafe`.
 - Confirmation de transaction compréhensible : montant, destinataire, frais, réseau, avertissements, **puis Face ID / biométrie native à chaque autorisation de signature**.
 - Recovery guidé et accessible sans ancien téléphone ; **Recovery Kit utilisateur indépendant** accessible en cas de disparition de Swissquote.
-- L'utilisateur sait que **deux guardians quelconques** suffisent, y compris A+B sans Swissquote, avec sept jours de contestation.
+- L'utilisateur sait que **deux guardians quelconques** suffisent, y compris A+B sans Swissquote, avec trois jours de contestation.
 
 ### Écrans MVP
 
@@ -722,7 +737,7 @@ Le **legal primer officiel** décrit cette situation de contrôle partagé banqu
 | `Receive` | Adresse ClientSafe, QR, réseau Sepolia |
 | `Send` | Token, destinataire, montant, simulation, écran de confirmation, bouton « Confirm with Face ID », signature locale protégée et état d’échec/annulation |
 | `Security Center` | Owner EOA, 3 guardians (seuil 2/3), Face ID, état Recovery Kit, demandes actives et bouton d’annulation |
-| `Recovery` | Recovery avec **n’importe quels 2 guardians**, 7 jours de contestation, notifications, annulation signée si ancienne EOA encore accessible ; backup EOA autonome |
+| `Recovery` | Recovery avec **n’importe quels 2 guardians**, 3 jours de contestation, notifications, annulation signée si ancienne EOA encore accessible ; backup EOA autonome |
 | `Swissquote Admin Demo` (optionnel) | Vérification d'identité simulée, décision institutionnelle, audit trail |
 
 **Design system :** couleurs sobres, typographie nette, surfaces claires/sombres cohérentes, feedback tactile et animations courtes. La priorité est le parcours `Create → Send → Recover`, pas le nombre d'écrans.
@@ -858,12 +873,12 @@ Les packages pouvant évoluer, **aucune version numérique non vérifiée n'est 
 - [ ] **POC E — Annulation sécurisée.** Sur `After7Days`, détecter `RecoveryExecuted`, alerter via deux canaux, signer une opération ClientSafe vers `cancelRecovery()`, constater `RecoveryCanceled`, puis vérifier l’absence de rotation.
 - [ ] **POC F — Finalisation.** Sur une autre Safe de démo avec `After3Minutes` clairement affiché, finaliser après l’échéance, prouver la rotation et le rejet de l’ancien owner.
 
-**Ne pas déclarer `D` acquis tant que les tests ne réussissent pas sur le réseau et avec la configuration finale.** Tester séparément une annulation authentifiée dans la fenêtre des 7 jours, un échec de `finalizeRecovery()` avant échéance, et une finalisation accélérée sur **une Safe de démonstration distincte** configurée pour 3 minutes.
+**Ne pas déclarer `D` acquis tant que les tests ne réussissent pas sur le réseau et avec la configuration finale.** Tester séparément une annulation authentifiée dans la fenêtre des 3 jours, un échec de `finalizeRecovery()` avant échéance, et une finalisation accélérée sur **une Safe de démonstration distincte** configurée pour 3 minutes.
 
 ### 15.2 Tests de sécurité / cas négatifs
 
 - [ ] Une signature Swissquote seule est **refusée**.
-- [ ] **Guardian A + Guardian B sans Swissquote sont acceptés** après seuil 2/3 ; la rotation reste soumise à 7 jours de contestation.
+- [ ] **Guardian A + Guardian B sans Swissquote sont acceptés** après seuil 2/3 ; la rotation reste soumise à 3 jours de contestation.
 - [ ] `finalizeRecovery()` avant `executeAfter` revert ; après `cancelRecovery()` la finalisation est impossible.
 - [ ] L’appel **direct** de l’ancienne EOA à `cancelRecovery()` ne suffit pas ; l’appel depuis ClientSafe **signé par son owner** annule correctement.
 - [ ] Push Expo, email/SMS, bannière in-app ; simulateur de panne d’un canal et bloc manqué par le watcher.
@@ -897,7 +912,7 @@ Les packages pouvant évoluer, **aucune version numérique non vérifiée n'est 
 ### 15.4 Script de démonstration
 
 1. **Create** : compte bancaire simulé → génération d'EOA locale → ClientSafe créée.
-2. **Protect** : afficher **trois guardians directs**, seuil 2/3 et délai de contestation de 7 jours ; enregistrer un canal d’alerte hors téléphone.
+2. **Protect** : afficher **trois guardians directs**, seuil 2/3 et délai de contestation de 3 jours ; enregistrer un canal d’alerte hors téléphone.
 3. **Fund** : créditer ClientSafe en ERC-20 de test.
 4. **Send** : vérifier le récapitulatif, confirmer via **Face ID / biométrie native**, signer avec la clé protégée, envoyer (gasless si disponible), ouvrir explorer.
 5. **Lose access** : se placer sur un nouvel appareil / réinitialiser la clé de test selon une procédure contrôlée.
@@ -912,12 +927,12 @@ Pour la démo, un délai très court **uniquement sur testnet** est acceptable s
 
 ## 16. Correspondance avec la track Swissquote
 
-Le **document officiel EPFL Hackathon Oct. 2026** exige **create → login/authenticate → sign & send → lose access → recover**, un custody model défendable et un threat model, une vraie transaction sur blockchain, une preuve d’accès aux fonds **même si Swissquote disparaît**, un traitement explicite de la **Travel Rule / wallet ownership verification**, un business case concret, et la **déclaration des outils IA utilisés**. Notre modèle repose sur un **recovery 2/3 indépendant de Swissquote**, avec **7 jours d’opposition on-chain** et un backup EOA hors ligne complémentaire.
+Le **document officiel EPFL Hackathon Oct. 2026** exige **create → login/authenticate → sign & send → lose access → recover**, un custody model défendable et un threat model, une vraie transaction sur blockchain, une preuve d’accès aux fonds **même si Swissquote disparaît**, un traitement explicite de la **Travel Rule / wallet ownership verification**, un business case concret, et la **déclaration des outils IA utilisés**. Notre modèle repose sur un **recovery 2/3 indépendant de Swissquote**, avec **3 jours d’opposition on-chain** et un backup EOA hors ligne complémentaire.
 
 | Critère officiel | Poids | Réponse du projet |
 |---|---:|---|
 | Technical implementation | **35** | Expo, EOA locale, Safe, ERC-20 testnet, ERC-4337, recovery on-chain |
-| Security & custody design | **20** | Clé utilisateur non partagée ; séparation EOA/Safe ; guardians directs 2/3 ; délai 7 jours, contestation et threat model |
+| Security & custody design | **20** | Clé utilisateur non partagée ; séparation EOA/Safe ; guardians directs 2/3 ; délai 3 jours, contestation et threat model |
 | Legal feasibility | **15** | Contrôle **conjoint** de recovery présenté comme zone grise ; attestation identité↔Safe par challenge signé, Travel Rule et rôles de l’institution selon flux, continuité sans banque |
 | Business case | **15** | Rétention de clients Swissquote, self-custody assistée, recovery institutionnel différenciant |
 | UX & pitch | **15** | Interface premium, Face ID/biométrie avant signature, wizard recovery et procédure autonome de secours |
@@ -931,7 +946,7 @@ Swissquote peut proposer une wallet qui reste intégrée à son écosystème, au
 
 ### Compromis à défendre devant le jury
 
-**Swissquote n’a plus de veto sur le recovery : A+B peuvent autoriser une récupération sans la banque.** Le Recovery Kit fournit une voie alternative distincte. En revanche, **n’importe quelle paire de guardians** (dont Swissquote+A) peut remplacer l’owner après 7 jours si l’owner n’annule pas on-chain : risque de collusion et de custody partagée à analyser juridiquement. Le délai n’est pas une preuve que le consentement a été obtenu.
+**Swissquote n’a plus de veto sur le recovery : A+B peuvent autoriser une récupération sans la banque.** Le Recovery Kit fournit une voie alternative distincte. En revanche, **n’importe quelle paire de guardians** (dont Swissquote+A) peut remplacer l’owner après 3 jours si l’owner n’annule pas on-chain : risque de collusion et de custody partagée à analyser juridiquement. Le délai n’est pas une preuve que le consentement a été obtenu.
 
 **Travel Rule et identité :** le lien **compte Swissquote KYC simulé ↔ ClientSafe ↔ signature EOA owner** doit être prouvé par un challenge daté et réévalué après rotation de clé. Lors des opérations directement déclenchées par le client depuis sa Safe, Swissquote n’est pas automatiquement établissement émetteur ; cela dépend de son rôle effectif. La conformité réelle et les listes de sanctions sont mockées.
 
@@ -976,7 +991,7 @@ Ne pas consacrer l'essentiel du temps au design avant la réussite du POC ERC-12
 | Safe ERC-4337 / signature mal configurés | Transactions ou annulations refusées | Pinner versions, vérifier que `cancelRecovery()` est appelé **par la Safe**, pas par l’EOA directement |
 | Service Candide Recovery UX inaccessible | Coordination API impossible | Construire la coordination de base dans FastAPI et appeler directement les contrats (après validation des méthodes) |
 | Paymaster/sponsoring non disponible | Démo gasless impossible | Garder transaction Safe confirmée via voie de financement alternative et l'expliquer ; ne jamais inventer un statut gasless |
-| Délai de 7 jours incompatible avec la démo en direct | Finalisation non observable dans le temps du jury | Garder le paramètre cible After7Days ; démontrer l’annulation immédiate et une finalisation sur une **autre** Safe de test avec After3Minutes, clairement étiquetée |
+| Délai de 3 jours incompatible avec la démo en direct | Finalisation non observable dans le temps du jury | Garder le paramètre cible After7Days ; démontrer l’annulation immédiate et une finalisation sur une **autre** Safe de test avec After3Minutes, clairement étiquetée |
 | Push / email non reçu | Owner non averti avant fin du délai | Event watcher indépendant, email/SMS/push + bannière in-app, test de panne et documentation : aucune livraison garantie |
 | EOA et backup perdus, Swissquote disparue, mais A+B actifs | Recovery **possible via A+B** | Prouver le parcours totalement hors banque ; pas de garantie si A/B ne sont pas disponibles |
 | PIN/Face ID seulement UI ou `LocalAuthentication` sans SecureStore protégé | Signature contournable par code compromis | `SecureStore.requireAuthentication=true` lors de la **lecture** du secret après confirmation ; tests sur vrai iPhone/Android |
@@ -1025,8 +1040,8 @@ Documentation officielle et code source utiles :
 
 | Demande explicite du brief | Réponse dans l'architecture | Preuve / statut requis |
 |---|---|---|
-| Custody decision + **pros/cons** | ClientSafe owner 1/1 ; **guardians SQ, A, B avec 2/3**, aucun obligatoire ; avantage résilience, risque de collusion + 7 jours de contestation | [ ] Architecture et limites défendues ; pas d’avis juridique acquis |
-| **Qui peut voler / verrouiller / banque + partenaire ?** | EOA compromise ; **toute paire** de guardians peut prendre le contrôle après 7 jours ; pas de veto Swissquote ; perte de clé owner empêche l’annulation | [ ] Threat model, collusion, annulation et absence de veto bancaire |
+| Custody decision + **pros/cons** | ClientSafe owner 1/1 ; **guardians SQ, A, B avec 2/3**, aucun obligatoire ; avantage résilience, risque de collusion + 3 jours de contestation | [ ] Architecture et limites défendues ; pas d’avis juridique acquis |
+| **Qui peut voler / verrouiller / banque + partenaire ?** | EOA compromise ; **toute paire** de guardians peut prendre le contrôle après 3 jours ; pas de veto Swissquote ; perte de clé owner empêche l’annulation | [ ] Threat model, collusion, annulation et absence de veto bancaire |
 | Architecture complète, **mocks identifiés** | Diagrammes Expo, SecureStore, Safe, Candide, FastAPI, RPC | [ ] Mock KYC, compliance, signer institutionnel et banques explicités dans app/demo |
 | Create + lien identité client | EOA sur appareil, KYC simulé + preuve cryptographique de contrôle | [ ] Sign challenge, verify owner, expiration/nonces et rotation testées |
 | Login/auth **avant signature** | `SecureStore.requireAuthentication`, Face ID / biométrie + preview | [ ] Face ID réel, annulation et double transaction testées |
@@ -1034,7 +1049,7 @@ Documentation officielle et code source utiles :
 | Lost / stolen / destroyed → **recover** | Candide 2/3 (SQ, A, B) + **After7Days**, alertes et `cancelRecovery()` on-chain ; refus d’une seule approval | [ ] Réel sur Sepolia ; rejet négatif prouvé |
 | **Swissquote services permanently gone** | Recovery **A+B sans Swissquote** + RPC/bundler indépendant ; Recovery Kit EOA comme seconde voie | [ ] Démo backend banque arrêté et récupération A+B ; délai démo distinct, preuve de solde inchangé |
 | Transaction réellement signée et broadcast | Expo EOA + Safe + ERC20 testnet | [ ] Hash et explorateur |
-| Custody legal grey zone | Deux guardians quelconques peuvent collectivement changer l’owner **après 7 jours** sans signature actuelle du client ; non-custodial **non conclu** | [ ] Explication juridique honnête |
+| Custody legal grey zone | Deux guardians quelconques peuvent collectivement changer l’owner **après 3 jours** sans signature actuelle du client ; non-custodial **non conclu** | [ ] Explication juridique honnête |
 | **Travel Rule / self-hosted wallet ownership** | Nonce challenge, owner check, KYC mock, re-link après recovery, analyse des flux banque↔wallet↔tiers | [ ] Vérification signée démontrée, scénarios et limites explicités |
 | Business case concret | Rétention des clients, produit de recovery premium, coûts/sponsoring gas | [ ] Au moins une hypothèse tarif/coût vérifiable ou scénario économique |
 | Bonus **gasless** | ERC-4337 + paymaster | [ ] Réel, coûts pris en charge et limites anti-abus |
@@ -1063,8 +1078,8 @@ Le brief demande de **déclarer les outils d'IA utilisés et leur rôle**. La li
 - **Implémenté (Add money) :** treasury Swissquote testnet persistante dans `.env` privée, funding manuel par faucets, déploiement Safe payé par la treasury, consentement signé sur téléphone, worker de signature séparé, idempotence et confirmation ERC-20 par reçu/événement avec deux confirmations. Validation sur EVM locale avec vrais contrats Safe ; validation Sepolia financée et appareil réel restent à réaliser. Mode par défaut : recovery 2/3 `After7Days` requis ; exception de test sans recovery explicitement étiquetée. Voir [backend](backend/README.md#add-money-persistent-demo-treasury).
 - **Non implémenté :** fournisseur KYC/AML/Travel Rule réel, infrastructure bancaire réelle, Recovery Kit hors ligne, signatures guardian et recovery. Le code de déploiement Safe et de transfert est implémenté mais pas encore démontré avec une Safe financée sur Sepolia. Les endpoints backend recovery refusent de procéder (`501`) au lieu de produire une fausse approval.
 
-- **Décidé :** Expo/React Native, EOA client locale avec Face ID/biométrie à la signature, ClientSafe, **3 guardians directs SQ/A/B, recovery 2/3**, contestation **7 jours on-chain**, FastAPI, Sepolia.
+- **Décidé :** Expo/React Native, EOA client locale avec Face ID/biométrie à la signature, ClientSafe, **3 guardians directs SQ/A/B, recovery 2/3**, contestation **3 jours on-chain**, FastAPI, Sepolia.
 - **Proposé :** watcher des événements de recovery + alertes push/email/SMS/in-app ; signer Swissquote testnet isolé ; Safe institutionnelle ERC-1271 facultative.
 - **À prouver :** compatibilité Expo/SDK, bon module `After7Days`, `RecoveryExecuted`, `cancelRecovery()` via ClientSafe, confirmation d’alerte, tests négatifs de finalisation précoce, recovery A+B sans banque, transaction ERC-4337 et sponsoring gas.
 
-**Définition du succès :** wallet mobile dont l’EOA est protégée par **Face ID/biométrie pour chaque signature**, transaction réelle depuis ClientSafe, recovery **2/3 sans obligation Swissquote**, **7 jours de contestation avant finalisation**, notifications multicanales et **annulation cryptographique par l’owner encore autorisé**. Démontrer la récupération indépendante A+B hors banque, préciser les limitations (perte de la clé d’annulation, collusion, livraison des alertes, custody et Travel Rule).
+**Définition du succès :** wallet mobile dont l’EOA est protégée par **Face ID/biométrie pour chaque signature**, transaction réelle depuis ClientSafe, recovery **2/3 sans obligation Swissquote**, **3 jours de contestation avant finalisation**, notifications multicanales et **annulation cryptographique par l’owner encore autorisé**. Démontrer la récupération indépendante A+B hors banque, préciser les limitations (perte de la clé d’annulation, collusion, livraison des alertes, custody et Travel Rule).

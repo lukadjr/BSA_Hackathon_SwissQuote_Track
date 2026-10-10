@@ -12,7 +12,7 @@ from eth_abi import decode, encode
 from app.wallet_registry.control import CHAIN_ID, FACTORY, ControlError, rpc_batch, selector
 
 USDC = "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238"
-RECOVERY_7D = "0x088f6cfd8bb1ddb1bb069ccb3fc1a98927d233f2"
+RECOVERY_3D = "0x38275826e1933303e508433dd5f289315da2541c"
 ADDRESS = re.compile(r"^0x[0-9a-fA-F]{40}$")
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -84,10 +84,12 @@ def snapshot():
 @guarded_read
 def security_status(safe):
     # An explicit development exception is visible in both the consent and UI.
-    # Normal mode verifies the selected seven-day recovery module and 2/3 setup.
+    # Normal mode verifies the selected three-day recovery module and 2/3 setup.
     if os.getenv("FUNDING_ALLOW_UNPROTECTED_DEMO", "false") == "true":
         return "unprotected_test_demo"
-    module = RECOVERY_7D
+    module = RECOVERY_3D
+    if os.getenv("RECOVERY_ALLOW_DEMO", "false") == "true":
+        module = "0x949d01d424be050d09c16025dd007cb59b3a8c66"
     enabled, guardians, threshold = rpc_batch(
         [
             eth_call(safe, "isModuleEnabled(address)", ["address"], [module]),
@@ -100,7 +102,11 @@ def security_status(safe):
         len(addresses) != 3 or len(set(addresses)) != 3 or uint_result(threshold) != 2
     ):
         raise ControlError("recovery_not_ready")
-    return "recovery_2_of_3_seven_days"
+    return (
+        "recovery_2_of_3_three_days"
+        if module == RECOVERY_3D
+        else "recovery_2_of_3_demo_three_minutes"
+    )
 
 
 def deployment(owner):

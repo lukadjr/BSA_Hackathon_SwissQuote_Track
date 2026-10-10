@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { Button } from '../components/Button';
+import { readPendingRecovery } from '../lib/recovery';
 import { describeWalletError, getAddress } from '../lib/wallet';
 
 export default function Startup() {
@@ -12,6 +13,7 @@ export default function Startup() {
     let active = true;
     getAddress()
       .then(async (address) => {
+        if (await readPendingRecovery()) return '/recover' as const;
         if (!address) return '/create-wallet' as const;
         // Bank linking never gates independent self-custody access.
         return '/wallet' as const;

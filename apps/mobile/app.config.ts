@@ -19,6 +19,15 @@ const config: ExpoConfig = {
     'expo-secure-store',
     './plugins/with-scene-lifecycle',
     [
+      'expo-camera',
+      {
+        cameraPermission:
+          'Allow Swissquote Wallet to scan guardian and recovery QR codes.',
+        microphonePermission: false,
+        recordAudioAndroid: false,
+      },
+    ],
+    [
       'expo-local-authentication',
       {
         faceIDPermission:

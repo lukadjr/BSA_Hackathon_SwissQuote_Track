@@ -73,7 +73,7 @@ function instruction(
     amount_units: kind === 'deploy' ? '0' : units,
     domain: 'swissquote-wallet.demo',
     security_mode:
-      kind === 'deploy' ? 'setup_only' : 'recovery_2_of_3_seven_days',
+      kind === 'deploy' ? 'setup_only' : 'recovery_2_of_3_three_days',
     message: '',
     expires_at: new Date(Date.now() + 300_000)
       .toISOString()

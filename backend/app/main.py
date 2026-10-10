@@ -608,3 +608,16 @@ from app.funding.routes import router as funding_router  # noqa: E402
 
 app.include_router(funding_router)
 Base.metadata.create_all(bind=engine)
+
+from app.recovery.routes import router as recovery_router  # noqa: E402
+from app.recovery.routes import start_watcher  # noqa: E402
+
+app.include_router(recovery_router)
+Base.metadata.create_all(bind=engine)
+if int(os.getenv("RECOVERY_WATCHER_SECONDS", "0") or "0") > 0:
+    start_watcher(int(os.environ["RECOVERY_WATCHER_SECONDS"]))
+
+from app.transactions.relay import router as relay_router  # noqa: E402
+
+app.include_router(relay_router)
+Base.metadata.create_all(bind=engine)

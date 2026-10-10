@@ -1,4 +1,8 @@
 import {
+  createTreasuryOperations,
+  type TreasuryRelay,
+} from './safeTransaction';
+import {
   Bundler,
   HttpTransport,
   SafeAccountV0_3_0,
@@ -21,12 +25,23 @@ import type { OwnerKeyStorage } from '../keys/storage';
 import {
   initializeSafe,
   predictSafeAddress,
+  readRecoveryModule,
   SAFE_DEPLOYMENT,
   sepoliaClient,
   validateConfig,
   verifySafe,
   type SepoliaConfig,
 } from '../safe/account';
+import {
+  cancelRecoveryCall,
+  invalidateApprovalsCall,
+  protectCalls,
+  readRecoveryState,
+  replaceGuardianCalls,
+  type Call,
+  type Guardians,
+  type RecoveryState,
+} from '../recovery/module';
 import { encodeTransfer, erc20Abi } from './erc20';
 
 export interface SafeAccountInfo {
@@ -47,10 +62,12 @@ export interface TransferPreview {
   readonly amountUnits: string;
   readonly decimals: number;
   readonly maxGasEth: string;
+  readonly gasPayer?: 'swissquote_treasury';
   readonly deploysSafe: boolean;
   readonly expiresAt: number;
 }
 export interface SubmittedTransfer {
+  execution?: 'treasury';
   ownerAddress: Address;
   safeAddress: Address;
   tokenAddress: Address;
@@ -70,6 +87,35 @@ export interface ConfirmedTransfer extends SubmittedTransfer {
   recipientBalanceBefore: string;
   recipientBalanceAfter: string;
   balanceChangesMatch: boolean;
+}
+/**
+ * Public binding for a Safe that this owner did not create, i.e. after a
+ * recovery. Absent or null: the Safe is the one predicted from the owner.
+ */
+export interface SafeAddressStore {
+  read(): Promise<Address | null>;
+}
+export type SecurityAction =
+  | { kind: 'protect'; module: Address; guardians: Guardians }
+  | { kind: 'cancel-recovery' }
+  | { kind: 'invalidate-approvals' }
+  | { kind: 'replace-guardian'; oldGuardian: Address; newGuardian: Address };
+export interface SecurityPreview {
+  readonly kind: SecurityAction['kind'];
+  readonly ownerAddress: Address;
+  readonly safeAddress: Address;
+  readonly module: Address;
+  readonly maxGasEth: string;
+  readonly gasPayer?: 'swissquote_treasury';
+  readonly deploysSafe: boolean;
+  readonly expiresAt: number;
+}
+export interface SecurityState {
+  ownerAddress: Address;
+  safeAddress: Address;
+  deployed: boolean;
+  /** null: no recovery module enabled yet. */
+  recovery: RecoveryState | null;
 }
 /** Public tracking only. Persist before submission to handle an ambiguous timeout. */
 export interface TransferActivityStore {
@@ -106,10 +152,14 @@ export function createSafeWallet({
   config: inputConfig,
   storage,
   activity,
+  safeAddress: safeStore,
+  relay,
 }: {
   config: SepoliaConfig;
   storage: OwnerKeyStorage;
   activity: TransferActivityStore;
+  safeAddress?: SafeAddressStore;
+  relay?: TreasuryRelay;
 }) {
   const config = validateConfig(inputConfig);
   const client = sepoliaClient(config);
@@ -149,7 +199,16 @@ export function createSafeWallet({
       );
     return getAddress(owner);
   }
+  async function resolveSafe(owner: Address): Promise<Address> {
+    const recovered = await safeStore?.read();
+    return recovered ? getAddress(recovered) : predictSafeAddress(owner);
+  }
   async function checkNetwork() {
+    if (relay) {
+      if ((await client.getChainId()) !== SAFE_DEPLOYMENT.chainId)
+        throw new WalletError('CHAIN_CONFIG_INVALID', 'RPC must be Sepolia.');
+      return;
+    }
     const [rpcChain, bundlerChain, supported] = await Promise.all([
       client.getChainId(),
       bundler.chainId(),
@@ -187,7 +246,7 @@ export function createSafeWallet({
     return network(async () => {
       await checkNetwork();
       const owner = await ownerAddress();
-      const safe = predictSafeAddress(owner);
+      const safe = await resolveSafe(owner);
       const [deployed, decimals, balance, eth] = await Promise.all([
         verifySafe(client, safe, owner),
         client.readContract({
@@ -447,7 +506,7 @@ export function createSafeWallet({
       const owner = await ownerAddress();
       if (
         !isAddressEqual(submitted.ownerAddress, owner) ||
-        !isAddressEqual(submitted.safeAddress, predictSafeAddress(owner)) ||
+        !isAddressEqual(submitted.safeAddress, await resolveSafe(owner)) ||
         !isAddressEqual(submitted.tokenAddress, config.tokenAddress)
       )
         throw new WalletError(
@@ -595,5 +654,279 @@ export function createSafeWallet({
       return result;
     });
   }
-  return { getAccount, prepareTransfer, submitTransfer, confirmTransfer };
+  // ---- Recovery configuration: operations signed by the current owner ----
+  const securityPrepared = new WeakMap<
+    SecurityPreview,
+    {
+      operation: UserOperationV7;
+      account: SafeAccountV0_3_0;
+      preparedAt: number;
+      validUntil: bigint;
+    }
+  >();
+
+  async function getSecurityState(): Promise<SecurityState> {
+    return network(async () => {
+      await checkNetwork();
+      const owner = await ownerAddress();
+      const safe = await resolveSafe(owner);
+      const deployed = await verifySafe(client, safe, owner);
+      const module = deployed ? await readRecoveryModule(client, safe) : null;
+      return {
+        ownerAddress: owner,
+        safeAddress: safe,
+        deployed,
+        recovery: module ? await readRecoveryState(client, module, safe) : null,
+      };
+    });
+  }
+
+  async function prepareSecurityOperation(
+    action: SecurityAction,
+    signal?: AbortSignal,
+  ): Promise<SecurityPreview> {
+    return network(async () => {
+      assertActive(signal);
+      if (await activity.readPending())
+        throw new WalletError(
+          'TRANSFER_PENDING',
+          'Check the pending transfer before changing security settings.',
+        );
+      const state = await getSecurityState();
+      const { ownerAddress: owner, safeAddress: safe, deployed } = state;
+      let calls: Call[];
+      let module: Address;
+      if (action.kind === 'protect') {
+        if (state.recovery)
+          throw new WalletError(
+            'SAFE_CONFIG_INVALID',
+            'Recovery is already set up for this Safe.',
+          );
+        module = getAddress(action.module);
+        calls = protectCalls(safe, owner, module, action.guardians);
+      } else {
+        if (!deployed || !state.recovery)
+          throw new WalletError(
+            'SAFE_CONFIG_INVALID',
+            'Recovery is not set up for this Safe.',
+          );
+        module = state.recovery.module;
+        if (action.kind === 'cancel-recovery') {
+          if (!state.recovery.pending)
+            throw new WalletError(
+              'SAFE_CONFIG_INVALID',
+              'There is no pending recovery to cancel.',
+            );
+          calls = [cancelRecoveryCall(module)];
+        } else if (action.kind === 'invalidate-approvals') {
+          if (state.recovery.pending)
+            throw new WalletError(
+              'SAFE_CONFIG_INVALID',
+              'A recovery already started: cancel it instead.',
+            );
+          calls = [invalidateApprovalsCall(module)];
+        } else {
+          if (state.recovery.pending)
+            throw new WalletError(
+              'SAFE_CONFIG_INVALID',
+              'Cancel the pending recovery before changing guardians.',
+            );
+          calls = replaceGuardianCalls(
+            module,
+            state.recovery.guardians,
+            action.oldGuardian,
+            action.newGuardian,
+            owner,
+          );
+        }
+      }
+      const account = deployed
+        ? new SafeAccountV0_3_0(safe)
+        : initializeSafe(owner);
+      if (!isAddressEqual(getAddress(account.accountAddress), safe))
+        throw new WalletError(
+          'SAFE_CONFIG_INVALID',
+          'This recovered Safe is not deployed.',
+        );
+      const operation = await account.createUserOperation(calls, rpc, bundler, {
+        expectedSigners: [owner],
+      });
+      const expectedCallData =
+        calls.length === 1
+          ? SafeAccountV0_3_0.createAccountCallDataSingleTransaction(calls[0])
+          : SafeAccountV0_3_0.createAccountCallDataBatchTransactions(calls);
+      if (
+        !isAddressEqual(getAddress(operation.sender), safe) ||
+        operation.callData !== expectedCallData ||
+        operation.paymaster !== null ||
+        operation.maxFeePerGas <= 0n ||
+        operation.maxFeePerGas > 1_000_000_000_000n ||
+        operation.maxPriorityFeePerGas > operation.maxFeePerGas ||
+        operation.callGasLimit <= 0n ||
+        operation.verificationGasLimit <= 0n
+      )
+        throw new WalletError(
+          'INVALID_TRANSFER',
+          'The constructed operation does not match the security change.',
+        );
+      const maxGas = calculateUserOperationMaxGasCost(operation);
+      const [eth, deposit, block] = await Promise.all([
+        client.getBalance({ address: safe }),
+        client.readContract({
+          address: SAFE_DEPLOYMENT.entryPoint,
+          abi: entryPointAbi,
+          functionName: 'balanceOf',
+          args: [safe],
+        }),
+        client.getBlock(),
+      ]);
+      if (eth + deposit < maxGas)
+        throw new WalletError(
+          'INSUFFICIENT_FUNDS',
+          'Fund the Safe with Sepolia ETH to cover the maximum gas fee.',
+        );
+      assertActive(signal);
+      const preview: SecurityPreview = Object.freeze({
+        kind: action.kind,
+        ownerAddress: owner,
+        safeAddress: safe,
+        module,
+        maxGasEth: formatUnits(maxGas, 18),
+        deploysSafe: !deployed,
+        expiresAt: Date.now() + 120_000,
+      });
+      securityPrepared.set(preview, {
+        operation: { ...operation },
+        account,
+        preparedAt: Date.now(),
+        validUntil: block.timestamp + 600n,
+      });
+      return preview;
+    });
+  }
+
+  async function submitSecurityOperation(
+    preview: SecurityPreview,
+    signal?: AbortSignal,
+  ): Promise<{ userOperationHash: Hash }> {
+    if (submitting)
+      throw new WalletError(
+        'TRANSFER_PENDING',
+        'An operation is already in progress.',
+      );
+    submitting = true;
+    try {
+      return await network(async () => {
+        const record = securityPrepared.get(preview);
+        const assertFresh = () => {
+          assertActive(signal);
+          if (!record || Date.now() - record.preparedAt > 120_000)
+            throw new WalletError(
+              'TRANSFER_EXPIRED',
+              'Prepare a fresh review before signing.',
+            );
+        };
+        assertFresh();
+        if (!record)
+          throw new WalletError('TRANSFER_EXPIRED', 'Prepare first.');
+        const nonce = await client.readContract({
+          address: SAFE_DEPLOYMENT.entryPoint,
+          abi: entryPointAbi,
+          functionName: 'getNonce',
+          args: [preview.safeAddress, 0n],
+        });
+        if (nonce !== record.operation.nonce)
+          throw new WalletError(
+            'TRANSFER_EXPIRED',
+            'The Safe nonce changed. Prepare a fresh review.',
+          );
+        let key;
+        let signature: string;
+        try {
+          key = await storage.readPrivateKeyForSigning();
+          assertFresh();
+          if (
+            !isAddressEqual(privateKeyToAddress(key), preview.ownerAddress) ||
+            !isAddressEqual(await ownerAddress(), preview.ownerAddress)
+          )
+            throw new WalletError(
+              'KEY_UNAVAILABLE',
+              'The signing key does not match the owner.',
+            );
+          signature = record.account.signUserOperation(
+            record.operation,
+            [key],
+            BigInt(SAFE_DEPLOYMENT.chainId),
+            { validUntil: record.validUntil },
+          );
+        } catch (e) {
+          if (e instanceof WalletError) throw e;
+          throw new WalletError(
+            'SIGNING_FAILED',
+            'Safe operation signing failed.',
+          );
+        } finally {
+          key = undefined;
+        }
+        assertFresh();
+        securityPrepared.delete(preview);
+        const operation = { ...record.operation, signature };
+        const expected = createUserOperationHash(
+          operation,
+          SAFE_DEPLOYMENT.entryPoint,
+          BigInt(SAFE_DEPLOYMENT.chainId),
+        ) as Hash;
+        const returned = await bundler.sendUserOperation(
+          operation,
+          SAFE_DEPLOYMENT.entryPoint,
+        );
+        if (returned.toLowerCase() !== expected.toLowerCase())
+          throw new WalletError(
+            'VERIFICATION_FAILED',
+            'Bundler returned an unexpected operation hash.',
+          );
+        return { userOperationHash: expected };
+      });
+    } finally {
+      submitting = false;
+    }
+  }
+
+  /** null while not included yet. The caller re-reads the security state after. */
+  async function checkSecurityOperation(
+    userOperationHash: Hash,
+  ): Promise<{ transactionHash: Hash; success: boolean } | null> {
+    return network(async () => {
+      const inclusion =
+        await bundler.getUserOperationReceipt(userOperationHash);
+      if (!inclusion) return null;
+      return {
+        transactionHash: inclusion.receipt.transactionHash as Hash,
+        success: inclusion.success === true,
+      };
+    });
+  }
+
+  const treasury = relay
+    ? createTreasuryOperations({
+        client,
+        storage,
+        relay,
+        activity,
+        getAccount,
+        getSecurityState,
+      })
+    : null;
+  return {
+    getAccount,
+    prepareTransfer,
+    submitTransfer,
+    confirmTransfer,
+    getSecurityState,
+    prepareSecurityOperation,
+    submitSecurityOperation,
+    checkSecurityOperation,
+    resumePendingRelay: treasury?.resumePendingRelay ?? (async () => null),
+    ...(treasury ?? {}),
+  };
 }

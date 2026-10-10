@@ -35,7 +35,7 @@ async function main() {
     transport: http(url),
   });
   const source =
-    'pragma solidity ^0.8.20; import "@openzeppelin/contracts/token/ERC20/ERC20.sol"; contract TestUSDC is ERC20 { constructor() ERC20("Test USD Coin", "USDC") { _mint(msg.sender, 100 * 10**6); } function decimals() public pure override returns(uint8) { return 6; } }';
+    'pragma solidity ^0.8.20; import "@openzeppelin/contracts/token/ERC20/ERC20.sol"; contract TestUSDC is ERC20 { constructor() ERC20("Test USD Coin", "USDC") { _mint(msg.sender, 10000 * 10**6); } function decimals() public pure override returns(uint8) { return 6; } }';
   const input = {
     language: 'Solidity',
     sources: { 'Test.sol': { content: source } },
@@ -71,6 +71,9 @@ async function main() {
     '0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67',
     '0x75cf11467937ce3f2f357ce24ffc3dbf8fd5c226',
     '0x2dd68b007b46fbe91b9a7c3eda5a7a1063cb5b47',
+    '0x9641d764fc13c8b624c04430c7356c1c7c8102e2',
+    '0x38275826e1933303e508433dd5f289315da2541c',
+    '0x949d01d424be050d09c16025dd007cb59b3a8c66',
   ];
   const upstream =
     process.env.SEPOLIA_SOURCE_RPC ||

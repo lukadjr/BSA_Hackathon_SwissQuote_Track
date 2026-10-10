@@ -9,3 +9,9 @@ const OPTIONS: SecureStore.SecureStoreOptions = {
 export async function clearWalletLinked(): Promise<void> {
   await SecureStore.deleteItemAsync(LINKED_KEY, OPTIONS);
 }
+
+/** Compatibility helper: status is always checked by the backend. */
+export async function isWalletLinked(): Promise<boolean> {
+  const { getLinkStatus } = await import('./api');
+  return (await getLinkStatus()).bank_transfers_allowed;
+}

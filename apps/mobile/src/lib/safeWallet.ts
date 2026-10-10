@@ -1,6 +1,8 @@
+import { treasuryRelay } from './treasuryRelay';
 import './polyfills';
 import {
   createSafeWallet,
+  predictSafeAddress,
   SAFE_DEPLOYMENT,
   WalletError,
   type SafeAccountInfo,
@@ -11,6 +13,7 @@ import {
 } from '@swissquote/wallet-core';
 import * as SecureStore from 'expo-secure-store';
 import { isAddress, isAddressEqual } from 'viem';
+import { clearRecoveryForDev, readRecoveredSafe } from './recovery';
 import { secureStoreAdapter } from './secureStoreAdapter';
 
 const OPTIONS: SecureStore.SecureStoreOptions = {
@@ -94,14 +97,25 @@ export function getSafeWallet() {
   service ??= createSafeWallet({
     config: {
       rpcUrl: process.env.EXPO_PUBLIC_RPC_PUBLIC_URL ?? '',
-      bundlerUrl: process.env.EXPO_PUBLIC_BUNDLER_URL ?? '',
+      bundlerUrl:
+        process.env.EXPO_PUBLIC_BUNDLER_URL ??
+        process.env.EXPO_PUBLIC_RPC_PUBLIC_URL ??
+        '',
       tokenAddress: (process.env.EXPO_PUBLIC_ERC20_TEST_ADDRESS ??
         '') as Address,
     },
     storage: secureStoreAdapter,
     activity: transferActivity,
+    relay: treasuryRelay,
+    // After a recovery this phone's key owns a Safe it did not create.
+    safeAddress: { read: readRecoveredSafe },
   });
   return service;
+}
+
+/** The Safe this owner key controls: recovered binding, else the predicted one. */
+export async function currentSafeAddress(owner: Address): Promise<Address> {
+  return (await readRecoveredSafe()) ?? predictSafeAddress(owner);
 }
 
 /** Persist public account identity; fail instead of silently changing a funded Safe. */
@@ -115,7 +129,7 @@ export async function getSafeAccount(): Promise<SafeAccountInfo> {
   };
   try {
     const json = await SecureStore.getItemAsync(ACCOUNT_KEY, OPTIONS);
-    if (json !== null) {
+    if (json !== null && !(await readRecoveredSafe())) {
       const saved = JSON.parse(json) as typeof binding;
       if (
         !isAddressEqual(saved.ownerAddress, binding.ownerAddress) ||
@@ -148,4 +162,6 @@ export async function clearSafeForDev() {
     throw new WalletError('NOT_IMPLEMENTED', 'Reset is for development only.');
   for (const key of [ACCOUNT_KEY, PENDING_KEY, CONFIRMED_KEY])
     await SecureStore.deleteItemAsync(key, OPTIONS);
+  await treasuryRelay.writePending(null);
+  await clearRecoveryForDev();
 }

@@ -211,6 +211,13 @@ export default function AddMoneyScreen() {
           </Text>
         </View>
       )}
+      {safe && safe.deployed && !active && (
+        <Button
+          label="Protect wallet before adding money"
+          secondary
+          onPress={() => router.push('/protect')}
+        />
+      )}
       {safe && !active && !safe.deployed && (
         <Button
           disabled={busy}

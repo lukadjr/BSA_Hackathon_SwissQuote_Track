@@ -105,7 +105,7 @@ export default function SendScreen() {
     <Screen>
       <Text className="text-2xl font-bold text-ink">Send test tokens</Text>
       <Text className="text-sm text-muted">
-        Sepolia only · Gas paid with your Safe’s test ETH
+        Sepolia only · Network fees covered by Swissquote
       </Text>
       <View className="gap-3">
         <Text className="text-base text-ink">Recipient</Text>
@@ -176,10 +176,10 @@ export default function SendScreen() {
             From Safe: {preview.safeAddress}
           </Text>
           <Text className="text-sm text-muted">
-            Maximum gas: {preview.maxGasEth} Sepolia ETH
+            Network fee: covered by Swissquote
           </Text>
           <Text className="text-sm text-muted">
-            Gas estimated by bundler.{' '}
+            The Swissquote treasury pays the network fee.{' '}
             {preview.deploysSafe
               ? 'This also deploys your Safe.'
               : 'Your Safe is deployed.'}

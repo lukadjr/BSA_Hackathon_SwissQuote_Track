@@ -24,7 +24,7 @@ def treasury(client, monkeypatch, tmp_path):
     monkeypatch.setenv("SWISSQUOTE_TREASURY_PRIVATE_KEY", signer.key.hex())
     monkeypatch.setenv("SWISSQUOTE_TREASURY_ADDRESS", signer.address)
     monkeypatch.setenv("ERC20_TEST_ADDRESS", TOKEN)
-    monkeypatch.setattr(chain, "security_status", lambda safe: "recovery_2_of_3_seven_days")
+    monkeypatch.setattr(chain, "security_status", lambda safe: "recovery_2_of_3_three_days")
     state = {
         "balance": 100_000_000,
         "eth": 10**18,
@@ -213,7 +213,7 @@ def test_creation_is_idempotent_and_only_one_active_request(client, treasury):
     assert create(client, amount="21").status_code == 409
     assert create(client, idempotency_key="another-" + "z" * 24).status_code == 409
     assert first.json()["amount_units"] == "20000000"
-    assert first.json()["security_mode"] == "recovery_2_of_3_seven_days"
+    assert first.json()["security_mode"] == "recovery_2_of_3_three_days"
 
 
 @pytest.mark.parametrize("kyc", ["pending", "rejected"])
@@ -518,8 +518,8 @@ def test_security_check_requires_enabled_seven_day_module_and_three_guardians(mo
     ]
     calls = []
     monkeypatch.setattr(chain, "rpc_batch", lambda batch: calls.extend(batch) or replies)
-    assert chain.security_status(SAFE) == "recovery_2_of_3_seven_days"
-    assert calls[1][1][0]["to"] == chain.RECOVERY_7D
+    assert chain.security_status(SAFE) == "recovery_2_of_3_three_days"
+    assert calls[1][1][0]["to"] == chain.RECOVERY_3D
     replies[2] = "0x" + encode(["uint256"], [1]).hex()
     with pytest.raises(ControlError):
         chain.security_status(SAFE)

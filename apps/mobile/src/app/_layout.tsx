@@ -41,7 +41,17 @@ export default function RootLayout() {
         />
         <Stack.Screen name="send" options={{ title: 'Send' }} />
         <Stack.Screen name="sign-test" options={{ title: 'Sign test' }} />
-        <Stack.Screen name="recovery" options={{ title: 'Recovery' }} />
+        <Stack.Screen name="recovery" options={{ title: 'Security' }} />
+        <Stack.Screen name="protect" options={{ title: 'Protect wallet' }} />
+        <Stack.Screen
+          name="replace-guardian"
+          options={{ title: 'Replace guardian' }}
+        />
+        <Stack.Screen name="guardian" options={{ title: 'Be a guardian' }} />
+        <Stack.Screen
+          name="recover"
+          options={{ title: 'Recover wallet', headerBackVisible: false }}
+        />
       </Stack>
     </SafeAreaProvider>
   );

@@ -160,7 +160,7 @@ def verify_receipt(intent, receipt, latest_block):
     return "confirmed"
 
 
-def process_once(sessions, journal, account):
+def process_funding_once(sessions, journal, account):
     with sessions() as db:
         # One outstanding bank transaction at a time avoids nonce/reservation races.
         intent = (
@@ -235,13 +235,53 @@ def process_once(sessions, journal, account):
         return True
 
 
+def process_once(sessions, journal, account):
+    # ONE dispatch loop/key/journal across bank funding and all client relays.
+    from app.transactions.relay import RelayDB
+    from app.transactions.worker import process_once as process_relay
+
+    with sessions() as db:
+        funding = (
+            db.query(FundingDB)
+            .filter(FundingDB.status.in_(("queued", "submitted", "reconciling")))
+            .order_by(FundingDB.created_at)
+            .first()
+        )
+        relays = (
+            db.query(RelayDB)
+            .filter(RelayDB.status.in_(("queued", "submitted", "reconciling")))
+            .all()
+        )
+        outstanding = [r for r in relays if r.transaction_hash is not None or journal.get(r.id)]
+        # A journaled/broadcast tx always reconciles before allocating another nonce.
+        if funding is not None and (funding.transaction_hash or journal.get(funding.id)):
+            selected = None
+        elif outstanding:
+            selected = min(outstanding, key=lambda r: r.created_at).id
+        elif relays:
+            emergency = [r for r in relays if r.kind == "cancel-recovery"]
+            first = min(emergency or relays, key=lambda r: r.created_at)
+            selected = (
+                first.id
+                if emergency or funding is None or first.created_at < funding.created_at
+                else None
+            )
+        else:
+            selected = None
+    return (
+        process_relay(sessions, journal, account, selected)
+        if selected
+        else process_funding_once(sessions, journal, account)
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
     account = treasury_account()
     path = Path(
-        os.getenv("TREASURY_JOURNAL_PATH", str(chain.ROOT / "backend/data/treasury.sqlite"))
+        os.getenv("TREASURY_JOURNAL_PATH") or str(chain.ROOT / "backend/data/treasury.sqlite")
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     # Shared across API processes/restarts. Do not run workers with separate journals.

@@ -50,7 +50,8 @@ export default function CreateWalletScreen() {
           Your keys.{'\n'}Your crypto.
         </Text>
         <Text className="text-lg text-muted">
-          Create your wallet on this phone to get started.
+          Create your wallet on this phone. Next, your Safe is prepared and
+          linked to Swissquote.
         </Text>
       </View>
       <View className="bg-white border border-line rounded-3xl p-6 gap-2">
@@ -87,6 +88,16 @@ export default function CreateWalletScreen() {
         onPress={() => {
           if (!busy) void onCreate();
         }}
+      />
+      <Button
+        label="I lost my phone: recover my wallet"
+        secondary
+        onPress={() => router.push('/recover')}
+      />
+      <Button
+        label="Help a friend: be a guardian"
+        secondary
+        onPress={() => router.push('/guardian')}
       />
     </Screen>
   );
