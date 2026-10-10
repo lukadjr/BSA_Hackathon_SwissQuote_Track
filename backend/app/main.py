@@ -2,13 +2,16 @@
 
 import os
 import secrets
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated
 
+from eth_account import Account
+from eth_account.messages import encode_defunct
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import Column, Integer, String, create_engine
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -26,12 +29,31 @@ class WalletDB(Base):
     owner_address = Column(String)
 
 
+class LinkChallengeDB(Base):
+    __tablename__ = "link_challenges"
+    id = Column(String, primary_key=True)
+    user_id = Column(String, index=True)
+    owner_address = Column(String)
+    message = Column(String)
+    expires_at = Column(DateTime)
+    used = Column(Boolean, default=False)
+
+
+class LinkedOwnerDB(Base):
+    __tablename__ = "linked_owners"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, unique=True, index=True)
+    owner_address = Column(String)
+    linked_at = Column(DateTime)
+
+
 Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="Swissquote Demo API",
     version="0.1.0",
     description=(
-        "Mock metadata and screening. Ownership verification and recovery are unimplemented."
+        "Mock metadata and screening. Owner-key linking checks a signature; "
+        "on-chain ownership and recovery are unimplemented."
     ),
 )
 bearer = HTTPBearer(auto_error=False)
@@ -149,6 +171,102 @@ def get_wallet(
     if not wallet:
         raise HTTPException(status_code=404, detail="Wallet not found for this user_id")
     return wallet_response(wallet)
+
+
+LINK_CHALLENGE_TTL = timedelta(minutes=5)
+
+
+class LinkChallengeRequest(StrictRequest):
+    owner_address: Address
+
+
+class LinkCompleteRequest(StrictRequest):
+    challenge_id: Annotated[str, StringConstraints(min_length=16, max_length=128)]
+    signature: Annotated[str, StringConstraints(pattern=r"^0x[0-9a-fA-F]{130}$")]
+
+
+def link_message(user_id: str, owner: str, nonce: str, expires_at: datetime) -> str:
+    # Shown verbatim on the phone before signing; must stay human-readable.
+    return "\n".join(
+        [
+            "Swissquote Wallet: link this phone's owner key to your account.",
+            f"Account: {user_id}",
+            f"Owner key: {owner}",
+            f"Nonce: {nonce}",
+            f"Expires: {expires_at.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+            "This moves no funds.",
+        ]
+    )
+
+
+def utcnow() -> datetime:
+    # SQLite drops tzinfo, so compare naive UTC values throughout.
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+@app.post("/wallets/link/challenge")
+def create_link_challenge(
+    req: LinkChallengeRequest,
+    user: Annotated[str, Depends(current_user)],
+    db: Session = Depends(get_db),
+):
+    expires_at = utcnow() + LINK_CHALLENGE_TTL
+    challenge = LinkChallengeDB(
+        id=secrets.token_urlsafe(24),
+        user_id=user,
+        owner_address=req.owner_address,
+        expires_at=expires_at,
+        used=False,
+    )
+    challenge.message = link_message(user, req.owner_address, challenge.id, expires_at)
+    db.add(challenge)
+    db.commit()
+    return {
+        "challenge_id": challenge.id,
+        "message": challenge.message,
+        "owner_address": req.owner_address,
+        "expires_at": expires_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+@app.post("/wallets/link/complete")
+def complete_link(
+    req: LinkCompleteRequest,
+    user: Annotated[str, Depends(current_user)],
+    db: Session = Depends(get_db),
+):
+    challenge = db.get(LinkChallengeDB, req.challenge_id)
+    if challenge is None or challenge.user_id != user:
+        raise HTTPException(status_code=404, detail="Unknown link challenge")
+    if challenge.used:
+        raise HTTPException(status_code=409, detail="Link challenge already used")
+    if challenge.expires_at < utcnow():
+        raise HTTPException(status_code=410, detail="Link challenge expired")
+    # Single use, even when the signature is wrong.
+    challenge.used = True
+    db.commit()
+    try:
+        signer = Account.recover_message(
+            encode_defunct(text=challenge.message), signature=req.signature
+        )
+    except Exception:
+        signer = None
+    if signer is None or signer.lower() != challenge.owner_address:
+        raise HTTPException(status_code=401, detail="Signature does not match the owner key")
+
+    linked = db.query(LinkedOwnerDB).filter(LinkedOwnerDB.user_id == user).first()
+    if linked is None:
+        linked = LinkedOwnerDB(user_id=user)
+        db.add(linked)
+    linked.owner_address = challenge.owner_address
+    linked.linked_at = utcnow()
+    db.commit()
+    return {
+        "success": True,
+        # Proves control of the owner key only; not KYC or on-chain Safe ownership.
+        "owner_key_verified": True,
+        "data": {"user_id": user, "owner_address": linked.owner_address},
+    }
 
 
 class TransactionScreenRequest(StrictRequest):

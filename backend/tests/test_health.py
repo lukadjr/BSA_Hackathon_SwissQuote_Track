@@ -1,9 +1,14 @@
+from datetime import timedelta
+
 import pytest
+from eth_account import Account
+from eth_account.messages import encode_defunct
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app import main
 from app.main import Base, app, get_db
 
 SAFE = "0x" + "1" * 40
@@ -159,7 +164,91 @@ def test_documented_routes(client):
         "/health",
         "/wallets/register",
         "/wallets/{user_id}",
+        "/wallets/link/challenge",
+        "/wallets/link/complete",
         "/transactions/screen",
         "/recovery/request",
         "/recovery/swissquote-approve",
     }
+
+
+# Throwaway key generated for tests only.
+OWNER_KEY = Account.create()
+
+
+def sign(message, account=OWNER_KEY):
+    return "0x" + account.sign_message(encode_defunct(text=message)).signature.hex().removeprefix(
+        "0x"
+    )
+
+
+def challenge(client, owner=None):
+    owner = owner or OWNER_KEY.address
+    response = client.post(
+        "/wallets/link/challenge", json={"owner_address": owner}, headers=HEADERS
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+def complete(client, challenge_id, signature):
+    return client.post(
+        "/wallets/link/complete",
+        json={"challenge_id": challenge_id, "signature": signature},
+        headers=HEADERS,
+    )
+
+
+def test_link_requires_credentials(client):
+    body = {"owner_address": OWNER_KEY.address}
+    assert client.post("/wallets/link/challenge", json=body).status_code == 401
+    body = {"challenge_id": "x" * 32, "signature": "0x" + "1" * 130}
+    assert client.post("/wallets/link/complete", json=body).status_code == 401
+
+
+def test_link_with_valid_signature(client):
+    data = challenge(client)
+    assert OWNER_KEY.address.lower() in data["message"]
+    assert "alice" in data["message"]
+    response = complete(client, data["challenge_id"], sign(data["message"]))
+    assert response.status_code == 200
+    assert response.json()["owner_key_verified"] is True
+    assert response.json()["data"] == {
+        "user_id": "alice",
+        "owner_address": OWNER_KEY.address.lower(),
+    }
+
+
+def test_link_rejects_wrong_signer_and_is_single_use(client):
+    data = challenge(client)
+    other = Account.create()
+    assert complete(client, data["challenge_id"], sign(data["message"], other)).status_code == 401
+    # A failed attempt burns the challenge.
+    assert complete(client, data["challenge_id"], sign(data["message"])).status_code == 409
+
+
+def test_link_rejects_replay_other_message_and_unknown_challenge(client):
+    data = challenge(client)
+    assert complete(client, data["challenge_id"], sign("something else")).status_code == 401
+    data = challenge(client)
+    assert complete(client, data["challenge_id"], sign(data["message"])).status_code == 200
+    assert complete(client, data["challenge_id"], sign(data["message"])).status_code == 409
+    assert complete(client, "y" * 32, sign(data["message"])).status_code == 404
+    assert complete(client, data["challenge_id"], "0x1234").status_code == 422
+
+
+def test_link_rejects_expired_and_other_users_challenge(client, monkeypatch):
+    data = challenge(client)
+    monkeypatch.setattr(main, "LINK_CHALLENGE_TTL", timedelta(seconds=-1))
+    expired = challenge(client)
+    assert complete(client, expired["challenge_id"], sign(expired["message"])).status_code == 410
+    monkeypatch.setenv("MOCK_USER_ID", "bob")
+    assert complete(client, data["challenge_id"], sign(data["message"])).status_code == 404
+
+
+def test_link_challenge_validates_owner(client):
+    for owner in ["invalid", "0x" + "0" * 40]:
+        response = client.post(
+            "/wallets/link/challenge", json={"owner_address": owner}, headers=HEADERS
+        )
+        assert response.status_code == 422

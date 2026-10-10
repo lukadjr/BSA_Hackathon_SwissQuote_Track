@@ -1,7 +1,9 @@
 # Swissquote demo backend
 
-FastAPI + SQLAlchemy/SQLite for authenticated prototype metadata. The mobile app
-currently signs locally and does not call this API. Registration records public
+FastAPI + SQLAlchemy/SQLite for authenticated prototype metadata. During
+onboarding the mobile app links its owner key: it fetches a challenge, the user
+confirms it, the phone signs it locally (EIP-191) and the backend checks the
+signature. Registration records public
 addresses only and returns `ownership_verified: false`: it is not an on-chain
 proof of control or KYC attestation.
 
@@ -35,6 +37,8 @@ identity by changing `user_id`; those requests return `403`.
 | `GET /health` | Public health check |
 | `POST /wallets/register` | Register/update the authenticated demo user's unverified metadata |
 | `GET /wallets/{user_id}` | Read that user's metadata; missing registration returns `404` |
+| `POST /wallets/link/challenge` | Issue a single-use, 5-minute challenge message for `owner_address` |
+| `POST /wallets/link/complete` | Check the challenge's EIP-191 signature and record the linked owner key |
 | `POST /transactions/screen` | Mock policy only: blocked test address, high-value review or approved |
 | `POST /recovery/request` | Validate user and registered Safe, then return `501` |
 | `POST /recovery/swissquote-approve` | Validate user and registered Safe, then return `501`; never emit a fake signature |
@@ -43,6 +47,11 @@ Requests reject unknown fields (including private keys), malformed/zero addresse
 and nonpositive/nonfinite amounts. Amounts use Decimal with six decimal places for
 the test USDC policy; values above 10,000 require mock review. The test blocklist
 contains `0x000000000000000000000000000000000000dead` and matches case-insensitively.
+
+Linking proves control of the owner key only (`owner_key_verified: true`); it is
+not KYC or proof of on-chain Safe ownership. A challenge is burned after one attempt.
+For the phone, set the app's `EXPO_PUBLIC_DEMO_ACCESS_TOKEN` to this disposable
+demo token; anything in an Expo build is readable, so never reuse a real secret.
 
 Recovery tracking, strengthened identity review, an isolated guardian signer,
 nonce/chain binding and on-chain verification remain separate implementation work.

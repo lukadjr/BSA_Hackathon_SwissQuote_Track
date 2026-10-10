@@ -1,10 +1,33 @@
 import { SEPOLIA } from '@swissquote/wallet-core';
 import { router } from 'expo-router';
-import { Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
 import { useOwnerAddress } from '../../hooks/useOwnerAddress';
+import { resetWalletForDev } from '../../lib/devReset';
+import { describeWalletError } from '../../lib/wallet';
 import { mockWallet } from './mock';
+
+function confirmDevReset() {
+  Alert.alert(
+    'Reset wallet?',
+    'Development only. This deletes the key on this phone for good. You will create and link a new wallet.',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete key',
+        style: 'destructive',
+        onPress: () => {
+          resetWalletForDev()
+            .then(() => router.replace('/create-wallet'))
+            .catch((e: unknown) =>
+              Alert.alert('Reset failed', describeWalletError(e)),
+            );
+        },
+      },
+    ],
+  );
+}
 
 export default function WalletScreen() {
   const { address, error } = useOwnerAddress();
@@ -46,6 +69,13 @@ export default function WalletScreen() {
         secondary
         onPress={() => router.push('/recovery')}
       />
+      {__DEV__ && (
+        <Button
+          label="Reset wallet (dev only)"
+          secondary
+          onPress={confirmDevReset}
+        />
+      )}
       <Text className="text-sm text-muted">
         No activity yet. This balance is sample data.
       </Text>

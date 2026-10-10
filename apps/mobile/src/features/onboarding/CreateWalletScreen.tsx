@@ -14,7 +14,7 @@ export default function CreateWalletScreen() {
     setError(null);
     try {
       await createWallet();
-      router.replace('/wallet');
+      router.replace('/link-wallet');
     } catch (e) {
       setError(describeWalletError(e));
       setBusy(false);

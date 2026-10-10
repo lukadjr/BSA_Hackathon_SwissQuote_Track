@@ -146,3 +146,19 @@ export const secureStoreAdapter: OwnerKeyStorage = {
     }
   },
 };
+
+/**
+ * Development builds only: erases the owner key so onboarding can be replayed.
+ * The key is gone for good; funds held by its address become unreachable.
+ */
+export async function deleteOwnerWalletForDev(): Promise<void> {
+  if (!__DEV__) throw fail('NOT_IMPLEMENTED', 'Reset is for development only.');
+  assertNative();
+  try {
+    await SecureStore.deleteItemAsync(PRIVATE_KEY, SECRET_OPTIONS);
+    await SecureStore.deleteItemAsync(ADDRESS_KEY, PUBLIC_OPTIONS);
+    await SecureStore.deleteItemAsync(PENDING_KEY, PUBLIC_OPTIONS);
+  } catch (e) {
+    throw mapNativeError(e);
+  }
+}
