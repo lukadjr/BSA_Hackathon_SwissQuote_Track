@@ -87,8 +87,10 @@ owner phone shows it and can void every approval already signed for it
   FORK_RPC_URL=http://127.0.0.1:8545 npm run recovery:fork-e2e
   ```
   covers protect, malicious recovery + cancel, every case above, replay and
-  non-guardian rejection. `npm run recovery:backend-fork-e2e` runs the same flow
-  through the backend (invite, approvals, Swissquote signer, relayer, alerts).
+  non-guardian rejection on the legacy ERC-4337 path. The old backend-fork
+  script predates stronger KYC and queued treasury APIs; use the current
+  optional `FUNDING_EVM_FIXTURE=... python -m pytest backend/tests` acceptance
+  instead, including the full HTTP/worker/wallet adapter test.
 - `npm run fork:bundler` serves a minimal bundler for the fork so the app itself
   can run against it (`EXPO_PUBLIC_RPC_PUBLIC_URL`, `EXPO_PUBLIC_BUNDLER_URL`).
 
@@ -100,10 +102,12 @@ export SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
 export RECOVERY_WATCHER_SECONDS=30                        # optional alerts watcher
 ```
 
-Fund the printed relayer address with Sepolia ETH (it pays for starting and
-finalizing recoveries). The Safe pays for its own "Protect" and "Cancel"
-operations, like transfers. Rebuild the app after pulling (`expo-camera` is a new
-native module): `cd apps/mobile && npx expo prebuild --platform ios && npx expo run:ios`.
+The single Swissquote treasury pays Protect, Cancel, Start and Finalize as well as
+funding/transfers. Run `app.funding.setup` once, fund its public treasury address
+with Sepolia ETH/test USDC and start `app.funding.worker` alongside the API.
+The guardian signs approvals only and does not need ETH. Recovery endpoints queue
+jobs; poll treasury operation status and verify the chain. See
+[the full Xcode/phone runbook](xcode-phone-test-handoff.md).
 
 ## Limits of the prototype
 

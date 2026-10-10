@@ -1,7 +1,7 @@
 # Swissquote demo backend
 
 FastAPI + SQLite. **Bank identity/KYC, AML, Travel Rule providers are mocked. The demo treasury submits real Sepolia transactions once funded;
-the Swissquote account is simulated and manually funded through faucets.** Funded Sepolia acceptance testing is still pending. Safe-control verification uses real EIP-191 signatures
+the Swissquote account is simulated and manually funded through faucets.** All online fees are paid by this one treasury, including owner-authorized Safe calls and recovery. Funded Sepolia acceptance testing is still pending. Safe-control verification uses real EIP-191 signatures
 and read-only Sepolia RPC calls. No client private key is accepted or stored.
 
 ## Run
@@ -89,23 +89,38 @@ six decimal places. It returns `approved` up to 10,000 or `review_required` abov
 10,000, with `mocked: true` and `funds_moved: false`. It issues no reusable payment
 token and executes no transfer. P2P signing remains independently client-controlled.
 
-## Recovery integration
+## Treasury relay and recovery integration
 
-`app/guardian_policy/identity_review.py` defines the server-side
-`RecoveryIdentityReview` and `permits_swissquote_approval` contract. A trusted,
-stored review must bind request ID, client, Safe, Sepolia and proposed new owner,
-and have an unexpired approval after an independent identity check. A verified
-onboarding profile, email or phone/session alone is insufficient. Mobile must
-never submit an approval object. This contract is **not wired to the recovery
-stubs** and performs no KYC checks or signatures by itself.
+`app/core.py` reexports the existing bank auth/database dependencies so recovery,
+wallet linking and funding share one database and identity. The owner key stays
+on the phone. `POST /transactions/relay` accepts a standard EIP-712 Safe transaction
+and its current-owner signature; `GET /transactions/{id}` returns durable status.
+The worker executes `Safe.execTransaction` with all reimbursement fields zero.
+It verifies the Safe signature/nonce, exact token/security call policy, simulation,
+canonical receipt, matching indexed execution hash, payment=0 and required events.
 
-The recovery coordinator must authenticate its review operator/provider, store
-and consume decisions, bind the current on-chain recovery nonce, apply guardian
-policy and use its separate signer. A+B recovery must work without the bank.
-After rotation, register the **same recovered Safe**, challenge/sign with its new
-owner and relink; do not replace it with an address predicted from the new key.
-The mobile Safe resolver currently derives addresses from the owner, so the
-recovery implementation must supply/persist the recovered Safe binding.
+The SAME `app.funding.worker` handles deployments, deposits, transfers, protection,
+cancellation, guardian changes and `/recovery/requests/{id}/submit|finalize` jobs.
+Recovery start/finalize endpoints queue and return operation IDs, not immediate
+confirmation. Poll `/transactions/{id}` and recheck on-chain recovery state. Normal
+funding requires the 3-day Candide module with three guardians/threshold two;
+`RECOVERY_ALLOW_DEMO=true` selects the separate 3-minute module for explicit tests.
+Do not use the unprotected funding bypass for the normal demo.
+
+The guardian key is separate and unfunded; initialize it with
+`PYTHONPATH=backend python -m app.guardian_policy.signer init`. There is no separate
+recovery relayer private key. Owner-signed cancellation does not require bank KYC
+or an existing bank attestation. Recovery uses the ORIGINAL Safe after rotation;
+mobile persists that binding and obtains a new bank-control proof for deposits.
+
+`/recovery/request` and `/recovery/swissquote-approve` remain legacy 501 routes;
+the real flow uses `/recovery/requests/...`. The Swissquote guardian approval is
+explicitly mocked (registered customer/session + confirmation). The independent
+`RecoveryIdentityReview` contract remains a future production requirement, not a
+claim that strong recovery identity verification has been implemented.
+
+See [Xcode/phone acceptance](../docs/xcode-phone-test-handoff.md) and
+[implementation/limits](../docs/gasless-implementation-plan.md).
 
 ## Storage compatibility and checks
 
@@ -207,8 +222,8 @@ A key/configuration change or owner rotation before signing blocks dispatch.
 A transaction already signed/broadcast cannot be cancelled by subsequent recovery.
 
 Two confirmations are a testnet policy, not a promise of irreversible finality.
-Real bank infrastructure, KYC/AML/sanctions/Travel Rule providers, recovery and
-outgoing paymaster sponsorship are not implemented by this feature.
+Real bank infrastructure, KYC/AML/sanctions/Travel Rule providers and
+ERC-4337 paymaster sponsorship remain outside this mocked treasury relay.
 
 ## Optional real local-EVM acceptance
 
@@ -230,7 +245,7 @@ and creates ephemeral funded keys in a mode-0600 file under `/tmp`. It never pri
 those keys. In another terminal:
 
 ```bash
-FUNDING_EVM_FIXTURE=/tmp/swissquote-funding-evm/fixture.json backend/.venv/bin/python -m pytest backend/tests/test_funding_local_evm.py -q
+FUNDING_EVM_FIXTURE=/tmp/swissquote-funding-evm/fixture.json backend/.venv/bin/python -m pytest backend/tests -q
 ```
 
 Each run creates a new owner/Safe; restart the fixture if its test-token supply runs

@@ -18,7 +18,9 @@ Tests réalisés : contrats Safe/Candide réels sur EVM local, client/Safe à z�
 signatures TypeScript → API Python, financement, transfert, rotation guardian,
 annulation et récupération avec délais 3 minutes/3 jours. Le build Xcode, la
 biométrie réelle et la validation financée sur Sepolia restent à faire sur iPhone.
-Voir [le plan et les limites](docs/gasless-implementation-plan.md).
+Voir [le plan et les limites](docs/gasless-implementation-plan.md),
+[le rapport de fusion/tests](docs/feature-integration-report.md) et
+[le guide Xcode/téléphones](docs/xcode-phone-test-handoff.md).
 
 ## Sommaire
 
@@ -539,14 +541,14 @@ Après une tentative malveillante annulée, révoquer/remplacer rapidement les g
 1. Saisie du destinataire et du montant.
 2. Vérifications : adresse, réseau, contrat token autorisé, décimales, solde, simulation, politique de risque.
 3. Encodage de l'appel `ERC20.transfer(recipient, rawAmount)` pour qu'il soit **émis par `ClientSafe`**.
-4. Construction de la `UserOperation` avec nonce, frais et éléments exigés par les SDK/protocoles choisis.
+4. Construction de la transaction Safe EIP-712 avec nonce Safe, zéro remboursement et calldata vérifiée.
 5. **Affichage de confirmation détaillé** : actif, quantité, adresse destinataire, réseau, coût/sponsoring ; action explicite « Confirm with Face ID / biométrie » après revue.
 6. **À chaque transfert :** `SecureStore.getItemAsync` avec `requireAuthentication:true`, prompt natif Face ID/Touch ID/biométrie Android (fallback OS explicite selon l’appareil). Si annulation/échec : **aucune signature**. Puis **signature sur appareil**, jamais à partir d’une clé précédemment gardée en mémoire.
-7. Envoi de la UserOperation signée au bundler ; paymaster éventuel pour payer le gas.
-8. Validation EntryPoint / Safe4337Module, exécution depuis ClientSafe ; transaction visible sur Sepolia.
-9. Lecture du reçu, affichage de `userOpHash` et du hash de transaction, actualisation du solde.
+7. Envoi de l’autorisation publique signée au relais de la trésorerie Swissquote.
+8. Validation de la signature owner dans Safe.execTransaction, exécution depuis ClientSafe ; frais externes payés par la trésorerie.
+9. Lecture du reçu, affichage de l'identifiant d'autorisation Safe et du hash de transaction, actualisation du solde.
 
-**Ce que l'application signe :** une autorisation Safe / ERC-4337 correctement encodée avec les nonces, domain separation et chain context attendus. **Ne jamais signer aveuglément un hash fourni par FastAPI** : l'app doit reconstruire ou vérifier localement les données critiques avant signature.
+**Ce que l'application signe :** une autorisation Safe EIP-712 correctement encodée avec nonce, domain separation et chain context attendus. **Ne jamais signer aveuglément un hash fourni par FastAPI** : l'app doit reconstruire ou vérifier localement les données critiques avant signature.
 
 **Contrat optionnel HighValueGuard :**
 Le contrat est intégré et testé sur une Safe réelle dans un EVM local : il vérifie
@@ -558,10 +560,16 @@ par ce transaction guard. Voir [les limites](contracts/README.md).
 
 ### 9.4 `Gasless`
 
-- **ERC-4337 n'est pas le paymaster** : le bundler soumet l'opération, et un paymaster compatible peut en financer le gas.
-- Si le sponsoring est refusé/indisponible, informer l'utilisateur et ne jamais annoncer une transaction gasless réussie.
-- Quotas et autorisations de sponsoring se gèrent côté serveur/fournisseur : les clés API privilégiées ne vont **pas** dans `EXPO_PUBLIC_*`.
-- Le gas reste payé sur la blockchain, mais pas directement par l'utilisateur lorsque sponsorisé.
+- Le téléphone signe une transaction Safe EIP-712 locale avec nonce Safe,
+  zéro remboursement (`gasPrice=0`) et calldata exacte.
+- La trésorerie Swissquote paie l'ETH de la transaction externe `execTransaction`
+  et fournit les USDC de test pour Add money ; une seule boucle worker/journal.
+- Le client et sa Safe restent à zéro ETH. Aucun bundler/paymaster n'est requis
+  dans le parcours mobile normal.
+- Une panne/trésorerie vide donne un état pending/erreur honnête. Ne pas resigner
+  après timeout : vérifier le même identifiant et réutiliser les mêmes octets.
+- La récupération sans banque reste possible via un payeur indépendant ; celui-ci
+  doit disposer d'ETH. Le chemin ERC-4337 historique reste un outil séparé.
 
 ### 9.5 `Compliant interaction` — bonus
 
