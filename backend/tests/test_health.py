@@ -3,13 +3,8 @@ from datetime import timedelta
 import pytest
 from eth_account import Account
 from eth_account.messages import encode_defunct
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app import main
-from app.main import Base, app, get_db
 
 SAFE = "0x" + "1" * 40
 OWNER = "0x" + "2" * 40
@@ -18,29 +13,6 @@ TOKEN = "test-only-demo-token-" + "x" * 32
 HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 REGISTRATION = {"user_id": "alice", "safe_address": SAFE, "owner_address": OWNER}
 RECOVERY = {"user_id": "alice", "safe_address": SAFE, "new_owner_address": NEW_OWNER}
-
-
-@pytest.fixture
-def client(monkeypatch):
-    monkeypatch.setenv("MOCK_ACCESS_TOKEN", TOKEN)
-    monkeypatch.setenv("MOCK_USER_ID", "alice")
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    sessions = sessionmaker(bind=engine)
-
-    def override_db():
-        with sessions() as db:
-            yield db
-
-    app.dependency_overrides[get_db] = override_db
-    try:
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        app.dependency_overrides.clear()
-        engine.dispose()
 
 
 def test_health_without_credentials_or_external_services(client, monkeypatch):
@@ -162,6 +134,9 @@ def test_recovery_fails_closed_and_requires_matching_registry(client, path):
 def test_documented_routes(client):
     assert set(client.get("/openapi.json").json()["paths"]) == {
         "/health",
+        "/auth/me",
+        "/wallets/link/status",
+        "/bank/transfers/authorize",
         "/wallets/register",
         "/wallets/{user_id}",
         "/wallets/link/challenge",
@@ -184,8 +159,12 @@ def sign(message, account=OWNER_KEY):
 
 def challenge(client, owner=None):
     owner = owner or OWNER_KEY.address
+    client.post("/wallets/register", json={**REGISTRATION, "owner_address": owner}, headers=HEADERS)
+
     response = client.post(
-        "/wallets/link/challenge", json={"owner_address": owner}, headers=HEADERS
+        "/wallets/link/challenge",
+        json={"owner_address": owner, "safe_address": SAFE, "chain_id": 11155111},
+        headers=HEADERS,
     )
     assert response.status_code == 200
     return response.json()
@@ -213,8 +192,11 @@ def test_link_with_valid_signature(client):
     response = complete(client, data["challenge_id"], sign(data["message"]))
     assert response.status_code == 200
     assert response.json()["owner_key_verified"] is True
+    assert response.json()["ownership_verified"] is True
     assert response.json()["data"] == {
         "user_id": "alice",
+        "safe_address": SAFE,
+        "chain_id": 11155111,
         "owner_address": OWNER_KEY.address.lower(),
     }
 
@@ -249,6 +231,8 @@ def test_link_rejects_expired_and_other_users_challenge(client, monkeypatch):
 def test_link_challenge_validates_owner(client):
     for owner in ["invalid", "0x" + "0" * 40]:
         response = client.post(
-            "/wallets/link/challenge", json={"owner_address": owner}, headers=HEADERS
+            "/wallets/link/challenge",
+            json={"owner_address": owner, "safe_address": SAFE, "chain_id": 11155111},
+            headers=HEADERS,
         )
         assert response.status_code == 422

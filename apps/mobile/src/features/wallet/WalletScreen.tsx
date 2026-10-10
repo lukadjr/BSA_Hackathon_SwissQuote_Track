@@ -71,6 +71,11 @@ export default function WalletScreen() {
           Test tokens · {SEPOLIA.name}
         </Text>
       </View>
+      <Button
+        label="Swissquote account (demo)"
+        secondary
+        onPress={() => router.push('/link-wallet')}
+      />
       <Button label="Send" onPress={() => router.push('/send')} />
       <View className="bg-white border border-line rounded-3xl p-6 gap-3">
         <Text className="text-lg font-semibold text-ink">Receive</Text>

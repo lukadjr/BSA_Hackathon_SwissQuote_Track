@@ -503,7 +503,7 @@ Après une tentative malveillante annulée, révoquer/remplacer rapidement les g
 
 ### 9.1 Onboarding — `Create + Protect`
 
-1. L’utilisateur accède au compte Swissquote **simulé** ; l’identité KYC de démonstration est liée au client connecté.
+1. L’utilisateur accède au compte Swissquote **simulé** via le token de démonstration ; `GET /auth/me` fournit le statut KYC configuré côté serveur. Seul `verified` permet l’onboarding bancaire. Les états `pending`/`rejected` sont visibles ; aucune pièce d’identité réelle n’est collectée.
 2. Expo génère une EOA locale et la protège dans SecureStore. **Pour le parcours de sortie indépendante, utiliser une génération BIP-39/BIP-32/BIP-44 standard** et faire enregistrer la phrase de restauration hors appareil, en vérifiant la même adresse dérivée. Ne pas activer les dépôts avant l’écran de risque lié à cette sauvegarde.
 3. L'application prépare/déploie `ClientSafe` avec `owner = ClientEOA`, `threshold = 1`.
 4. Configurer le module ERC-4337 compatible et le module de recovery sans collisions de handlers / versions.
@@ -677,7 +677,7 @@ Le **legal primer officiel** décrit cette situation de contrôle partagé banqu
 
 **Décision produit assumée :** Swissquote **n’a aucun droit de veto** sur la récupération par guardians. A+B permettent une récupération sans banque, et le Recovery Kit demeure une sauvegarde supplémentaire. Toutefois la banque **avec un tiers**, ou les **deux guardians personnels**, peuvent obtenir le contrôle après un délai de 7 jours si l’owner n’annule pas. Cela nécessite une analyse juridique du pouvoir partagé ; le délai n’équivaut pas à une approbation explicite du client.
 
-### 11.6 Travel Rule et vérification de la wallet — proposition d'intégration
+### 11.6 Travel Rule et vérification de la wallet — intégration prototype
 
 **Ce qui est demandé par le brief :** démontrer la propriété/maîtrise d'une wallet self-hosted au moment des transferts Swissquote et préciser quand Swissquote est ou non institution émettrice. Le guide simplifie les obligations ; l'application réelle dépend du rôle des parties, du type de transfert et des règles en vigueur.
 
@@ -687,7 +687,11 @@ Le **legal primer officiel** décrit cette situation de contrôle partagé banqu
 2. FastAPI génère un challenge à **nonce unique**, durée limitée, domaine et chain ID, lié à `client_id`, `ClientSafe`, action de liaison et moment de création.
 3. Le client confirme le challenge et le **signe avec l’EOA owner** sur son téléphone après authentification locale ; le backend vérifie la signature, consulte `ClientSafe.getOwners()` / configuration de contrôle on-chain et enregistre une **preuve datée de contrôle** liée à l'identité bancaire. Pour un schéma contractuel plus complexe, vérifier la signature avec la règle de validation du smart account (par ex. ERC-1271) plutôt que supposer un owner unique.
 4. Avant tout transfert réel, la banque appliquerait ses contrôles AML/Travel Rule, identification du bénéficiaire et des contreparties pertinentes. **MVP : vérification de contrôle réelle sur testnet si développée ; KYC/Travel Rule provider et transfert bancaire mockés.** La signature ne prouve ni la propriété juridique exclusive, ni la véracité des données d’identité, ni l'identité de tous les destinataires futurs.
-5. Après toute rotation d'owner par recovery, **invalider la précédente attestation** et refaire le lien identité↔contrôle avec la nouvelle EOA. Vérifier que l'owner correspond toujours avant une sortie Swissquote.
+5. Après toute rotation d'owner par recovery, **invalider la précédente attestation** et refaire le lien identité↔contrôle avec la nouvelle EOA. Le backend revérifie le contrôle à chaque lecture de statut et autorisation bancaire simulée, et invalide une attestation en cas de changement détecté. La chaîne reste la source de vérité ; le raccordement au watcher de recovery reste à réaliser.
+
+**Implémenté sur `feature/kyc-wallet-link` :** identité bancaire configurée côté serveur (mock), challenge signé lié à la Safe/chaîne/domaine/client, consommation atomique du nonce, vérification RPC du proxy Safe 1.4.1 / owner unique / seuil 1 / module 4337, preuve datée en SQLite et autorisation bancaire **simulée sans mouvement de fonds**. Les anciennes liaisons EOA seules ne valent pas preuve de contrôle de la Safe. Les guardians et le délai de recovery ne sont pas certifiés par ce contrôle (`security_configuration_verified: false`).
+
+**Déploiement :** le code actuel déploie la Safe lors du premier transfert testnet. Avant déploiement, la liaison reste en attente ; l’app permet l’accès indépendant à la wallet de test. Ne pas présenter un préfinancement testnet manuel comme un retrait bancaire autorisé. Voir [API et configuration KYC](backend/README.md) et [handoff iPhone](docs/kyc-iphone-handoff.md).
 
 **Flux `ClientSafe` → banque :** sur un dépôt depuis la wallet vers Swissquote, vérifier que le client contrôle bien l'adresse source, en tenant compte des changements d'owner et des obligations AML/Travel Rule applicables ; ne pas traiter automatiquement une transaction publique comme preuve d'identité bancaire.
 
@@ -1054,7 +1058,8 @@ Le brief demande de **déclarer les outils d'IA utilisés et leur rôle**. La li
 **Milestone 1 livré ; flux transaction Safe/ERC-4337 implémenté, acceptation financée sur Sepolia et appareil réel encore à prouver.**
 
 - **Implémenté :** création EOA et signature/vérification EIP-191 via viem ; adaptateur SecureStore protégé, startup et écran de signature ; annulation sur background/navigation ; API de métadonnées SQLite avec token de démonstration configuré côté serveur et validation stricte. Wallet/Send lisent les soldes Safe et construisent/signent/soumettent les transferts ERC-20 Sepolia via RPC/bundler configurés ; voir [runbook transaction](docs/sepolia-transaction.md). Voir [getting-started](docs/getting-started.md) et [backend](backend/README.md).
-- **Non implémenté :** preuve de contrôle on-chain, Recovery Kit hors ligne, signatures guardian et recovery. Le code de déploiement Safe et de transfert est implémenté mais pas encore démontré avec une Safe financée sur Sepolia. Les endpoints backend recovery refusent de procéder (`501`) au lieu de produire une fausse approval.
+- **Implémenté (KYC/link) :** profil Swissquote simulé, liaison client↔Safe par challenge EIP-191, vérification de contrôle on-chain via RPC Sepolia, invalidation à la détection de changement d’owner, journaux et prévisualisation d’autorisation bancaire mockée. Validation positive sur une Safe financée et biométrie iPhone restent à réaliser ; voir [handoff KYC](docs/kyc-iphone-handoff.md).
+- **Non implémenté :** fournisseur KYC/AML/Travel Rule réel, exécution de transferts bancaires, Recovery Kit hors ligne, signatures guardian et recovery. Le code de déploiement Safe et de transfert est implémenté mais pas encore démontré avec une Safe financée sur Sepolia. Les endpoints backend recovery refusent de procéder (`501`) au lieu de produire une fausse approval.
 
 - **Décidé :** Expo/React Native, EOA client locale avec Face ID/biométrie à la signature, ClientSafe, **3 guardians directs SQ/A/B, recovery 2/3**, contestation **7 jours on-chain**, FastAPI, Sepolia.
 - **Proposé :** watcher des événements de recovery + alertes push/email/SMS/in-app ; signer Swissquote testnet isolé ; Safe institutionnelle ERC-1271 facultative.

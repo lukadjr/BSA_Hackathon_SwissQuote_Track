@@ -2,7 +2,7 @@
 // addresses, challenge ids and signatures. Never send a private key.
 import type { Address, Signature } from './wallet';
 
-const REQUEST_TIMEOUT_MS = 10_000;
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export type ApiErrorCode =
   | 'NOT_CONFIGURED'
@@ -24,17 +24,45 @@ export class ApiError extends Error {
   }
 }
 
+export interface ClientIdentity {
+  client_id: string;
+  display_name: string;
+  kyc_status: 'verified' | 'pending' | 'rejected';
+  verified_at: string | null;
+  mocked: true;
+}
+
+export interface LinkStatus {
+  client_id: string;
+  kyc_status: ClientIdentity['kyc_status'];
+  control_status: string;
+  bank_transfers_allowed: boolean;
+  safe_address: Address | null;
+  owner_address: Address | null;
+  chain_id: number;
+  verified_at: string | null;
+  checked_block: number | null;
+  identity_mocked: true;
+}
+
 export interface LinkChallenge {
   challengeId: string;
   message: string;
+  userId: string;
   ownerAddress: Address;
+  safeAddress: Address;
+  chainId: number;
+  domain: string;
   expiresAt: string;
 }
 
 export interface LinkResult {
   userId: string;
   ownerAddress: Address;
+  safeAddress: Address;
+  chainId: number;
   ownerKeyVerified: boolean;
+  ownershipVerified: boolean;
 }
 
 function config() {
@@ -54,23 +82,25 @@ async function request<T>(
   path: string,
   body: unknown,
   signal?: AbortSignal,
+  method: 'GET' | 'POST' = 'POST',
 ): Promise<T> {
   const { baseUrl, token } = config();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const onAbort = () => controller.abort();
   signal?.addEventListener('abort', onAbort);
+  if (signal?.aborted) controller.abort();
 
   let response: Response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
-      method: 'POST',
+      method,
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(body),
+      body: method === 'GET' ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
   } catch {
@@ -115,20 +145,64 @@ async function request<T>(
   );
 }
 
+export function getClientIdentity(
+  signal?: AbortSignal,
+): Promise<ClientIdentity> {
+  return request('/auth/me', undefined, signal, 'GET');
+}
+
+export function getLinkStatus(signal?: AbortSignal): Promise<LinkStatus> {
+  return request('/wallets/link/status', undefined, signal, 'GET');
+}
+
+export async function registerWallet(
+  userId: string,
+  safeAddress: Address,
+  ownerAddress: Address,
+  signal?: AbortSignal,
+): Promise<void> {
+  await request(
+    '/wallets/register',
+    {
+      user_id: userId,
+      safe_address: safeAddress,
+      owner_address: ownerAddress,
+    },
+    signal,
+  );
+}
+
 export async function requestLinkChallenge(
   ownerAddress: Address,
+  safeAddress: Address,
   signal?: AbortSignal,
 ): Promise<LinkChallenge> {
   const data = await request<{
     challenge_id: string;
     message: string;
+    user_id: string;
     owner_address: Address;
+    safe_address: Address;
+    chain_id: number;
+    domain: string;
     expires_at: string;
-  }>('/wallets/link/challenge', { owner_address: ownerAddress }, signal);
+  }>(
+    '/wallets/link/challenge',
+    {
+      owner_address: ownerAddress,
+      safe_address: safeAddress,
+      chain_id: 11155111,
+    },
+    signal,
+  );
   return {
     challengeId: data.challenge_id,
     message: data.message,
+    userId: data.user_id,
     ownerAddress: data.owner_address,
+    safeAddress: data.safe_address,
+    chainId: data.chain_id,
+    domain: data.domain,
     expiresAt: data.expires_at,
   };
 }
@@ -140,7 +214,13 @@ export async function completeLink(
 ): Promise<LinkResult> {
   const data = await request<{
     owner_key_verified: boolean;
-    data: { user_id: string; owner_address: Address };
+    ownership_verified: boolean;
+    data: {
+      user_id: string;
+      owner_address: Address;
+      safe_address: Address;
+      chain_id: number;
+    };
   }>(
     '/wallets/link/complete',
     { challenge_id: challengeId, signature },
@@ -149,6 +229,27 @@ export async function completeLink(
   return {
     userId: data.data.user_id,
     ownerAddress: data.data.owner_address,
+    safeAddress: data.data.safe_address,
+    chainId: data.data.chain_id,
     ownerKeyVerified: data.owner_key_verified === true,
+    ownershipVerified: data.ownership_verified === true,
   };
+}
+
+export function authorizeBankTransfer(
+  safeAddress: Address,
+  direction: 'bank_to_wallet' | 'wallet_to_bank',
+  amount: string,
+): Promise<{
+  status: string;
+  mocked: true;
+  funds_moved: false;
+  checked_block: number;
+}> {
+  return request('/bank/transfers/authorize', {
+    safe_address: safeAddress,
+    chain_id: 11155111,
+    direction,
+    amount,
+  });
 }

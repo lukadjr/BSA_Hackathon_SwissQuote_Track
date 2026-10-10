@@ -3,7 +3,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Text, View } from 'react-native';
 import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
-import { isWalletLinked } from '../../lib/linkStatus';
+import {
+  getClientIdentity,
+  getLinkStatus,
+  type ClientIdentity,
+} from '../../lib/api';
+import { getSafeAccount } from '../../lib/safeWallet';
+import { requireVerifiedIdentity } from '../../lib/walletlink';
 import {
   confirmWalletLink,
   describeLinkError,
@@ -13,6 +19,7 @@ import {
 } from '../../lib/walletlink';
 
 export default function LinkWalletScreen() {
+  const [identity, setIdentity] = useState<ClientIdentity | null>(null);
   const [challenge, setChallenge] = useState<LinkChallenge | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -24,16 +31,37 @@ export default function LinkWalletScreen() {
 
   useEffect(() => {
     const controller = new AbortController();
-    // Linking happens once, during wallet creation. Never offer it again.
-    isWalletLinked()
-      .then(async (done) => {
-        if (done) {
-          router.replace('/wallet');
-          return;
-        }
-        const c = await startWalletLink(controller.signal);
-        if (!controller.signal.aborted) setChallenge(c);
-      })
+    async function load() {
+      const profile = await getClientIdentity(controller.signal);
+      if (controller.signal.aborted) return;
+      setIdentity(profile);
+      requireVerifiedIdentity(profile);
+      const account = await getSafeAccount();
+      if (controller.signal.aborted) return;
+      const status = await getLinkStatus(controller.signal);
+      if (
+        status.bank_transfers_allowed &&
+        status.chain_id === 11155111 &&
+        status.client_id === profile.client_id &&
+        status.safe_address?.toLowerCase() ===
+          account.safeAddress.toLowerCase() &&
+        status.owner_address?.toLowerCase() ===
+          account.ownerAddress.toLowerCase()
+      ) {
+        setLinked({
+          userId: profile.client_id,
+          ownerAddress: account.ownerAddress,
+          safeAddress: account.safeAddress,
+          chainId: 11155111,
+          ownerKeyVerified: true,
+          ownershipVerified: true,
+        });
+        return;
+      }
+      const c = await startWalletLink(controller.signal);
+      if (!controller.signal.aborted) setChallenge(c);
+    }
+    load()
       .catch(
         (e: unknown) =>
           !controller.signal.aborted && setError(describeLinkError(e)),
@@ -59,6 +87,8 @@ export default function LinkWalletScreen() {
   );
 
   function retry() {
+    setChallenge(null);
+    setLinked(null);
     setLoading(true);
     setError(null);
     setAttempt((n) => n + 1);
@@ -75,7 +105,7 @@ export default function LinkWalletScreen() {
       const result = await confirmWalletLink(challenge, {
         signal: controller.signal,
       });
-      if (focused.current) setLinked(result);
+      if (focused.current && !controller.signal.aborted) setLinked(result);
     } catch (e) {
       if (focused.current) {
         setError(describeLinkError(e));
@@ -99,16 +129,24 @@ export default function LinkWalletScreen() {
             Wallet linked to Swissquote
           </Text>
           <Text className="text-base text-muted text-center">
-            Swissquote verified that this phone holds your wallet key. You will
-            not need to do this again.
+            Control of your Safe was verified on Sepolia and linked to your demo
+            account. You must confirm the link again after an owner change.
           </Text>
         </View>
         <View className="bg-white border border-line rounded-3xl p-6 gap-2">
-          <Text className="text-sm text-muted">Linked key</Text>
+          <Text className="text-sm text-muted">Verified Safe · Sepolia</Text>
           <Text selectable className="text-sm text-ink">
-            {linked.ownerAddress}
+            {linked.safeAddress}
           </Text>
         </View>
+        <Text className="text-sm text-muted">
+          Identity checks are simulated. This does not certify guardian setup or
+          full Travel Rule compliance.
+        </Text>
+        <Button
+          label="Test bank connection (demo)"
+          onPress={() => router.push('/bank-link')}
+        />
         <Button
           label="Open my wallet"
           onPress={() => router.replace('/wallet')}
@@ -121,9 +159,23 @@ export default function LinkWalletScreen() {
     <Screen>
       <Text className="text-2xl font-bold text-ink">Link to Swissquote</Text>
       <Text className="text-base text-muted">
-        Confirm that this phone holds your wallet key. Read the message below,
-        then sign it with Face ID.
+        Link your existing Swissquote demo identity to the Safe you control.
+        Read the confirmation, then sign with biometrics. This moves no funds.
       </Text>
+      <View className="bg-white border border-line rounded-3xl p-6 gap-2">
+        <Text className="text-lg font-semibold text-ink">
+          Swissquote account · simulated
+        </Text>
+        <Text className="text-base text-muted">
+          {identity?.display_name ?? 'Loading bank identity…'}
+        </Text>
+        <Text className="text-sm text-muted">
+          Identity: {identity?.kyc_status ?? 'unavailable'}
+        </Text>
+        <Text className="text-sm text-muted">
+          Existing bank KYC is reused. No identity documents are uploaded.
+        </Text>
+      </View>
       {loading && <ActivityIndicator />}
       {challenge !== null && (
         <View className="bg-white border border-line rounded-3xl p-6 gap-2">
@@ -142,8 +194,19 @@ export default function LinkWalletScreen() {
           }}
         />
       ) : (
-        !loading && <Button label="Try again" onPress={retry} />
+        !loading && <Button label="Refresh verification" onPress={retry} />
       )}
+      <Button
+        label="Open testnet wallet"
+        secondary
+        disabled={busy}
+        onPress={() => router.replace('/wallet')}
+      />
+      <Text className="text-sm text-muted">
+        Bank linking requires a deployed Safe. In this prototype, the first
+        testnet transfer deploys it; bank transfers stay blocked until linking
+        succeeds.
+      </Text>
     </Screen>
   );
 }

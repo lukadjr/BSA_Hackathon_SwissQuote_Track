@@ -30,6 +30,10 @@ export default function RootLayout() {
             gestureEnabled: false,
           }}
         />
+        <Stack.Screen
+          name="bank-link"
+          options={{ title: 'Bank connection · demo' }}
+        />
         <Stack.Screen name="wallet" options={{ title: 'Your wallet' }} />
         <Stack.Screen name="send" options={{ title: 'Send' }} />
         <Stack.Screen name="sign-test" options={{ title: 'Sign test' }} />
