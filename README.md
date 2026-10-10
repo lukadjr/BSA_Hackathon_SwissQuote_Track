@@ -707,7 +707,7 @@ Le **legal primer officiel** décrit cette situation de contrôle partagé banqu
 - Le client voit **une wallet**, correspondant à `ClientSafe`.
 - Confirmation de transaction compréhensible : montant, destinataire, frais, réseau, avertissements, **puis Face ID / biométrie native à chaque autorisation de signature**.
 - Recovery guidé et accessible sans ancien téléphone ; **Recovery Kit utilisateur indépendant** accessible en cas de disparition de Swissquote.
-- L'utilisateur sait que **Swissquote doit approuver toute récupération** et qu'un contact indépendant doit aussi participer.
+- L'utilisateur sait que **deux guardians quelconques** suffisent, y compris A+B sans Swissquote, avec sept jours de contestation.
 
 ### Écrans MVP
 
@@ -1051,7 +1051,10 @@ Le brief demande de **déclarer les outils d'IA utilisés et leur rôle**. La li
 
 ## Statut du projet
 
-**Documentation d'architecture, pas code livré.**
+**Prototype Milestone 1 livré ; acceptation sur appareil réel et blockchain encore à prouver.**
+
+- **Implémenté :** création EOA et signature/vérification EIP-191 via viem ; adaptateur SecureStore protégé, startup et écran de signature ; annulation sur background/navigation ; API de métadonnées SQLite avec token de démonstration configuré côté serveur et validation stricte. Soldes/transferts restent mockés ; le mobile n'appelle pas encore FastAPI. Voir [getting-started](docs/getting-started.md) et [backend](backend/README.md).
+- **Non implémenté :** preuve de contrôle on-chain, Recovery Kit hors ligne, déploiement Safe, signatures guardian et recovery. Les endpoints backend recovery refusent de procéder (`501`) au lieu de produire une fausse approval.
 
 - **Décidé :** Expo/React Native, EOA client locale avec Face ID/biométrie à la signature, ClientSafe, **3 guardians directs SQ/A/B, recovery 2/3**, contestation **7 jours on-chain**, FastAPI, Sepolia.
 - **Proposé :** watcher des événements de recovery + alertes push/email/SMS/in-app ; signer Swissquote testnet isolé ; Safe institutionnelle ERC-1271 facultative.

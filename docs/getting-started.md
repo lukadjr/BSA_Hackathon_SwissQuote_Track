@@ -11,7 +11,7 @@ npm ci
 npm run mobile:web
 ```
 
-Le navigateur permet de vérifier rapidement les quatre écrans : accueil → wallet → aperçu Send et Recovery. Tous les soldes sont fictifs ; aucun secret, adresse de réception, appel API ou appel blockchain n'est utilisé. `Send` affiche uniquement les champs saisis, sans validation ni signature.
+Le parcours de création et signature de clé est maintenant natif : le navigateur affiche une erreur de stockage indisponible, sans fallback de clé en mémoire. Sur téléphone, le startup ouvre `/create-wallet` ou `/wallet` selon l’adresse publique enregistrée ; `/sign-test` signe et vérifie un message EIP-191. Soldes, Send et Recovery restent des aperçus, sans appel API ou blockchain. Aucun dépôt ne doit être effectué.
 
 Pour un téléphone, le parcours de référence est un **Development Build** :
 
@@ -23,9 +23,9 @@ npm run mobile:ios
 npm run mobile
 ```
 
-Les dossiers natifs sont générés par Expo et ignorés par Git. Les identifiants `com.bsa.swissquotewallet.demo` sont des valeurs de développement à adapter. Le mock peut aussi être essayé avec `npm run mobile:go` dans une version d'Expo Go compatible avec le SDK installé. La validation de SecureStore/Face ID et du cycle de vie des clés devra se faire en Development Build sur appareil réel.
+Les dossiers natifs sont générés par Expo et ignorés par Git. Les identifiants `com.bsa.swissquotewallet.demo` sont des valeurs de développement à adapter. Expo Go et le navigateur ne valident pas le parcours de clé protégée. La validation de SecureStore/Face ID et du cycle de vie des clés devra se faire en Development Build sur appareil réel.
 
-Le mock fonctionne sans fichier `.env`. Pour les intégrations futures :
+Le parcours local de clé fonctionne sans fichier `.env`. Pour les intégrations futures :
 
 ```bash
 cp apps/mobile/.env.example apps/mobile/.env
@@ -41,10 +41,12 @@ Prérequis : Python 3.11+ (vérifié avec 3.11). Depuis la racine :
 python3 -m venv backend/.venv
 source backend/.venv/bin/activate
 python -m pip install -r backend/requirements-dev.txt
+export MOCK_USER_ID=demo-user
+export MOCK_ACCESS_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 python -m uvicorn app.main:app --app-dir backend --reload --host 0.0.0.0 --port 8000
 ```
 
-`GET http://localhost:8000/health` répond avec l'état du service ; `http://localhost:8000/docs` affiche OpenAPI. C'est le seul endpoint métier livré. Le mobile ne dépend pas de ce service pour l'instant. Aucun modèle SQLite, session, signer ou workflow de recovery n'est implémenté. `backend/.env.example` réserve les futurs paramètres ; le starter ne les charge pas encore.
+`GET http://localhost:8000/health` est public ; `/docs` affiche OpenAPI. Les endpoints métier exigent `Authorization: Bearer <MOCK_ACCESS_TOKEN>` pour l’unique identité de démonstration configurée par le serveur. Sans token configuré (32 caractères minimum), ils retournent `503`. SQLite conserve les adresses publiques, sans attestation de contrôle on-chain ; screening explicitement mocké. Les routes recovery valident l’utilisateur et la Safe enregistrée, puis retournent `501` tant que le workflow et le signer isolé ne sont pas implémentés. Voir [backend/README.md](../backend/README.md). Les variables doivent être exportées dans le shell : `.env` n’est pas chargé automatiquement.
 
 Pour installer uniquement le runtime : `python -m pip install -r backend/requirements.txt`. Les deux fichiers fixent aussi les dépendances transitives.
 
@@ -54,18 +56,14 @@ Pour installer uniquement le runtime : `python -m pip install -r backend/require
 npm run typecheck
 npm run lint
 npm run format:check
+npm test
 # Depuis le venv actif :
 python -m pytest backend
 python -m ruff check backend
 python -m ruff format --check backend
 ```
 
-`npm test` prépare Vitest pour `tests/wallet-core/*.test.ts`. Aucun test blockchain n'existe encore ; une sortie « no test files » est normale. Les deux tests backend vérifient le health endpoint et l'absence d'endpoints métier accidentels.
-
-Validation du starter : installation propre avec `npm ci`, TypeScript, ESLint,
-Prettier, Ruff, deux tests API, 21 checks Expo Doctor, démarrage du serveur Expo
-et exports JavaScript/Hermes web + Android + iOS. Ces exports ne remplacent pas
-un build natif installé sur téléphone ; l'interface n'a pas été vérifiée visuellement.
+Vitest couvre le core (création, signature, vérification et annulation), le bootstrap crypto et le rollback SecureStore simulé. Pytest couvre les routes API avec une base en mémoire isolée. Les tests et exports JavaScript/Hermes web + Android + iOS ne remplacent pas un build natif installé sur téléphone. Vérifier la même adresse après redémarrage, biométrie répétée, annulation, background/navigation et invalidation de clé ; le Recovery Kit hors ligne reste à implémenter.
 
 Au bootstrap, `npm audit` rapporte 35 avis (14 modérés, 21 élevés) dans l'arbre
 de dépendances Expo/NativeWind, notamment `braces`, `node-forge`, `uuid`,
@@ -79,9 +77,9 @@ la gestion de secrets. Aucune commande `npm audit fix --force` n'a été appliqu
 | Équipe     | Point d'entrée                                                       | Prochaine étape                                                                  |
 | ---------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Mobile     | `apps/mobile/src/app`, `src/features`, `src/components`, `src/theme` | POC A sur appareil : entropie native, SecureStore, authentification et signature |
-| Blockchain | `packages/wallet-core` et `config/deployments.example.json`          | POC B/C puis signatures ERC-1271 imbriquées (POC D)                              |
-| Backend    | `backend/app` et `backend/tests`                                     | Définir les métadonnées publiques et contrats d'API de la section 10             |
+| Blockchain | `packages/wallet-core` et `config/deployments.example.json`          | POC B/C puis recovery direct SQ/A/B 2/3, dont A+B sans banque                    |
+| Backend    | `backend/app` et `backend/tests`                                     | Preuve de contrôle on-chain, identité renforcée et signer isolé                  |
 
-`wallet-core` expose uniquement les métadonnées Sepolia et garde une entrée TypeScript consommable par Metro. Les dossiers spécialisés indiquent leurs responsabilités. `viem`, `abstractionkit` et les contrats restent à choisir, installer et verrouiller après les POCs ; aucune compatibilité n'est revendiquée. Tous les champs de déploiement sont `null` jusqu'à vérification sur Sepolia.
+`wallet-core` expose Sepolia et l’API de clé/signature viem, consommées par l’adaptateur natif SecureStore. `apps/mobile/index.ts` installe l’entropie native avant de charger Expo Router et les routes. `abstractionkit` et les contrats restent à intégrer après les POCs ; les champs de déploiement restent `null` jusqu’à vérification sur Sepolia.
 
 Sources de configuration : [Expo SDK 57](https://docs.expo.dev/versions/v57.0.0/), [monorepos Expo](https://docs.expo.dev/guides/monorepos/), [installation Expo Router](https://docs.expo.dev/router/installation/), [NativeWind v4](https://www.nativewind.dev/docs/getting-started/installation).

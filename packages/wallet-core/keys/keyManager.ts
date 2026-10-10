@@ -63,8 +63,8 @@ export function createOwnerWallet({
       }
     },
 
-    signMessage(message) {
-      return signOwnerMessage(storage, message);
+    signMessage(message, options) {
+      return signOwnerMessage(storage, message, options?.signal);
     },
 
     verifyMessage(input) {

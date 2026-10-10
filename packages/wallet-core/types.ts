@@ -18,7 +18,10 @@ export interface OwnerWallet {
   /** Explicit onboarding action; never overwrite an existing wallet. */
   createWallet(): Promise<{ address: Address }>;
   /** Call after user confirmation. Each attempt must unlock the key afresh. */
-  signMessage(message: string): Promise<SignedMessage>;
+  signMessage(
+    message: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<SignedMessage>;
   /** Public verification, with no secret access or authentication. */
   verifyMessage(input: VerifyMessageInput): Promise<boolean>;
 }

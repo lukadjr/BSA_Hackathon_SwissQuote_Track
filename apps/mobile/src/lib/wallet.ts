@@ -19,7 +19,7 @@ export function describeWalletError(e: unknown): string {
   if (e instanceof WalletError) {
     switch (e.code) {
       case 'AUTH_CANCELLED':
-        return 'Authentication cancelled. Nothing was signed.';
+        return 'Signing cancelled. No signature returned.';
       case 'AUTH_UNAVAILABLE':
         return (
           e.message ||
@@ -33,6 +33,14 @@ export function describeWalletError(e: unknown): string {
         return 'A wallet already exists on this phone.';
       case 'NOT_IMPLEMENTED':
         return 'This feature is not available yet.';
+      case 'STORAGE_FAILED':
+        return e.message;
+      case 'KEY_GENERATION_FAILED':
+        return 'Secure key generation failed. Restart the app and try again.';
+      case 'INVALID_MESSAGE':
+        return 'The message cannot be signed.';
+      case 'SIGNING_FAILED':
+        return 'Signing failed. Nothing was returned.';
       default:
         return 'Storage error. Please try again.';
     }

@@ -1,51 +1,61 @@
-# Swissquote Self-Custody Wallet — Backend Service
+# Swissquote demo backend
 
-> **BSA Hackathon — Swissquote Wallet Challenge**  
-> **Component:** Backend API (Python / FastAPI)  
-> **Status:** Prototype Implementation  
+FastAPI + SQLAlchemy/SQLite for authenticated prototype metadata. The mobile app
+currently signs locally and does not call this API. Registration records public
+addresses only and returns `ownership_verified: false`: it is not an on-chain
+proof of control or KYC attestation.
 
----
+## Run
 
-## Overview
+From the repository root:
 
-This backend service acts as the simulated institutional core for Swissquote in the self-custody wallet prototype. It provides metadata tracking, identity-to-wallet linkage, and governance/guardian approval workflows for the Safe Smart Accounts. 
+```bash
+python3 -m venv backend/.venv
+source backend/.venv/bin/activate
+python -m pip install -r backend/requirements-dev.txt
+export MOCK_USER_ID=demo-user
+export MOCK_ACCESS_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+python -m uvicorn app.main:app --app-dir backend --reload --host 0.0.0.0 --port 8000
+```
 
-*Note: The backend **never** handles, stores, or transmits user private keys. All cryptographic signing happens locally on the user's mobile device.*
+`backend/.env.example` documents settings; the file is not loaded automatically.
+`DATABASE_URL` defaults to `sqlite:///./swissquote_mock.db`, relative to the server's
+working directory. The token must contain at least 32 characters. Without a
+configured token, business endpoints return `503`; `/health` remains available.
 
----
+This is one server-provisioned demo identity, not production banking login. Supply
+`Authorization: Bearer <MOCK_ACCESS_TOKEN>` to business endpoints. Keep the token
+out of Git, logs and public Expo configuration. A request cannot select another
+identity by changing `user_id`; those requests return `403`.
 
-## Tech Stack
+## Routes
 
-- **Language:** Python 3.11+
-- **Framework:** FastAPI
-- **Data Validation:** Pydantic
-- **Database:** SQLite (local prototype storage via SQLAlchemy)
-- **Server:** Uvicorn
+| Route | Behavior |
+| --- | --- |
+| `GET /health` | Public health check |
+| `POST /wallets/register` | Register/update the authenticated demo user's unverified metadata |
+| `GET /wallets/{user_id}` | Read that user's metadata; missing registration returns `404` |
+| `POST /transactions/screen` | Mock policy only: blocked test address, high-value review or approved |
+| `POST /recovery/request` | Validate user and registered Safe, then return `501` |
+| `POST /recovery/swissquote-approve` | Validate user and registered Safe, then return `501`; never emit a fake signature |
 
----
+Requests reject unknown fields (including private keys), malformed/zero addresses,
+and nonpositive/nonfinite amounts. Amounts use Decimal with six decimal places for
+the test USDC policy; values above 10,000 require mock review. The test blocklist
+contains `0x000000000000000000000000000000000000dead` and matches case-insensitively.
 
-## Implemented Features (Current Progress)
+Recovery tracking, strengthened identity review, an isolated guardian signer,
+nonce/chain binding and on-chain verification remain separate implementation work.
+The API never claims a recovery was submitted or approved. The intended on-chain
+policy is any two guardians SQ/A/B, including A+B without this backend.
 
-1. **Health Check (`GET /health`)**
-   - Verifies the service status and ensures the API is running smoothly.
-2. **Wallet Registration (`POST /wallets/register`)**
-   - Receives and stores public metadata from the mobile application when a user creates or connects their wallet.
-   - Links a unique `user_id` to their `safe_address` (on-chain Safe smart account) and `owner_address` (client EOA signing key).
-3. **Wallet Retrieval (`GET /wallets/{user_id}`)**
-   - Fetches registered public wallet addresses for a given user.
-4. **Recovery Request (`POST /recovery/request`)**
-   - Registers a social recovery request when a user loses access to their device/key and requests institutional assistance.
-5. **Swissquote Guardian Approval (`POST /recovery/swissquote-approve`)**
-   - Simulates the institutional guardian's digital approval/signature required to reach the 2/3 threshold for account recovery.
+## Checks
 
----
+```bash
+python -m pytest backend
+python -m ruff check backend
+python -m ruff format --check backend
+```
 
-## Project Structure
-
-```text
-backend/
-├── app/
-│   ├── __init__.py
-│   └── main.py          # FastAPI application, database models, and routes
-├── venv/                # Python virtual environment
-└── requirements.txt     # Python dependencies
+Tests use an isolated in-memory database and cover authentication, cross-user
+access, validation, registration, mock screening and recovery failing closed.

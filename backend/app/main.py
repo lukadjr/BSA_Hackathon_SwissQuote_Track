@@ -1,18 +1,23 @@
-"""Health-only starter; business endpoints are left for the team."""
+"""Authenticated demo metadata API; on-chain ownership and recovery remain unimplemented."""
 
-from fastapi import FastAPI, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import create_engine, Column, String, Integer
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+import os
+import secrets
+from decimal import Decimal
+from typing import Annotated
 
-# SQLite database URL for local prototype storage
-SQLALCHEMY_DATABASE_URL = "sqlite:///./swissquote_mock.db"
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
+from sqlalchemy import Column, Integer, String, create_engine
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
+
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./swissquote_mock.db")
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Database model representing registered wallets (metadata only, NO private keys!)
+
 class WalletDB(Base):
     __tablename__ = "wallets"
     id = Column(Integer, primary_key=True, index=True)
@@ -20,16 +25,18 @@ class WalletDB(Base):
     safe_address = Column(String)
     owner_address = Column(String)
 
-# Create database tables if they do not exist
-Base.metadata.create_all(bind=engine)
 
+Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="Swissquote Demo API",
     version="0.1.0",
-    description="Hackathon starter. Wallet and recovery endpoints are not implemented.",
+    description=(
+        "Mock metadata and screening. Ownership verification and recovery are unimplemented."
+    ),
 )
+bearer = HTTPBearer(auto_error=False)
 
-# Dependency to get a database session for each request
+
 def get_db():
     db = SessionLocal()
     try:
@@ -37,146 +44,170 @@ def get_db():
     finally:
         db.close()
 
-class HealthResponse(BaseModel):
+
+def current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+) -> str:
+    # One server-provisioned demo identity. Never mint a session for a caller's user_id.
+    token = os.getenv("MOCK_ACCESS_TOKEN", "")
+    user_id = os.getenv("MOCK_USER_ID", "demo-user")
+    if len(token) < 32 or not user_id.strip():
+        raise HTTPException(status_code=503, detail="Demo authentication is not configured")
+    if credentials is None or not secrets.compare_digest(
+        credentials.credentials.encode(), token.encode()
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid demo credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user_id
+
+
+def require_user(user_id: str, authenticated_user: str) -> None:
+    if user_id != authenticated_user:
+        raise HTTPException(status_code=403, detail="Cannot access another user's wallet")
+
+
+def validate_address(value: str) -> str:
+    if int(value[2:], 16) == 0:
+        raise ValueError("The zero address is not allowed")
+    return value.lower()
+
+
+Address = Annotated[
+    str,
+    StringConstraints(pattern=r"^0x[0-9a-fA-F]{40}$"),
+    AfterValidator(validate_address),
+]
+UserId = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+
+
+class StrictRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+
+class HealthResponse(StrictRequest):
     status: str
     service: str
 
-# Simple health check endpoint
+
 @app.get("/health", response_model=HealthResponse, tags=["health"])
 def health() -> HealthResponse:
     return HealthResponse(status="ok", service="swissquote-demo")
 
-# Pydantic model for validating incoming wallet registration data
-class WalletRegistration(BaseModel):
-    user_id: str
-    safe_address: str
-    owner_address: str
+
+class WalletRegistration(StrictRequest):
+    user_id: UserId
+    safe_address: Address
+    owner_address: Address
 
 
-# Endpoint to register or update a client's wallet public addresses
+def wallet_response(wallet: WalletDB) -> dict:
+    return {
+        "success": True,
+        "ownership_verified": False,
+        "data": {
+            "user_id": wallet.user_id,
+            "safe_address": wallet.safe_address,
+            "owner_address": wallet.owner_address,
+        },
+    }
+
+
 @app.post("/wallets/register")
-def register_wallet(wallet: WalletRegistration, db: Session = Depends(get_db)):
-    # Check if the user already exists in the database
-    existing_wallet = db.query(WalletDB).filter(WalletDB.user_id == wallet.user_id).first()
-
+def register_wallet(
+    wallet: WalletRegistration,
+    user: Annotated[str, Depends(current_user)],
+    db: Session = Depends(get_db),
+):
+    require_user(wallet.user_id, user)
+    existing_wallet = db.query(WalletDB).filter(WalletDB.user_id == user).first()
     if existing_wallet:
-        # Update addresses if they have changed
         existing_wallet.safe_address = wallet.safe_address
         existing_wallet.owner_address = wallet.owner_address
+        registered = existing_wallet
     else:
-        # Create a new record for a new user
-        db_wallet = WalletDB(
-            user_id=wallet.user_id,
-            safe_address=wallet.safe_address,
-            owner_address=wallet.owner_address
-        )
-        db.add(db_wallet)
-
-    # Commit changes to the SQLite database
-    db.commit()
-
-    return {
-        "success": True,
-        "message": "Wallet successfully registered and stored in the database!",
-        "data": {
-            "user_id": wallet.user_id,
-            "safe_address": wallet.safe_address,
-            "owner_address": wallet.owner_address
-        }
-    }
+        registered = WalletDB(**wallet.model_dump())
+        db.add(registered)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Wallet registration conflict") from None
+    return wallet_response(registered)
 
 
-# Endpoint to retrieve wallet information by user_id
 @app.get("/wallets/{user_id}")
-def get_wallet(user_id: str, db: Session = Depends(get_db)):
-    # Search for the user in the database
-    wallet = db.query(WalletDB).filter(WalletDB.user_id == user_id).first()
-
-    # If the user does not exist, return a 404 HTTP error
+def get_wallet(
+    user_id: str,
+    user: Annotated[str, Depends(current_user)],
+    db: Session = Depends(get_db),
+):
+    require_user(user_id, user)
+    wallet = db.query(WalletDB).filter(WalletDB.user_id == user).first()
     if not wallet:
-        raise HTTPException(status_code=404, model_not_found=True, detail="Wallet not found for this user_id")
-
-    return {
-        "success": True,
-        "data": {
-            "user_id": wallet.user_id,
-            "safe_address": wallet.safe_address,
-            "owner_address": wallet.owner_address
-        }
-    }
+        raise HTTPException(status_code=404, detail="Wallet not found for this user_id")
+    return wallet_response(wallet)
 
 
-class TransactionScreenRequest(BaseModel):
-    recipient_address: str
-    amount: float
+class TransactionScreenRequest(StrictRequest):
+    recipient_address: Address
+    amount: Decimal = Field(gt=0, allow_inf_nan=False, max_digits=30, decimal_places=6)
+
 
 @app.post("/transactions/screen")
-def screen_transaction(tx: TransactionScreenRequest):
-    # Simulation de liste noire / sanctions ou dApps non approuvées
-    blacklisted_addresses = ["0xBadAddress000000000000000000000000000000"]
-
-    if tx.recipient_address in blacklisted_addresses:
-        return {
-            "status": "blocked",
-            "reason": "Address is blacklisted by compliance screening (Sanctions check)."
-        }
-
-    if tx.amount > 10000:
+def screen_transaction(
+    tx: TransactionScreenRequest,
+    user: Annotated[str, Depends(current_user)],
+):
+    # Valid test address; this is mock policy, not real sanctions enforcement.
+    if tx.recipient_address == "0x000000000000000000000000000000000000dead":
+        return {"status": "blocked", "mock": True, "reason": "Blocked by demo screening policy."}
+    if tx.amount > Decimal("10000"):
         return {
             "status": "review_required",
-            "reason": "High-value transaction requires additional Swissquote check."
+            "mock": True,
+            "reason": "Demo high-value review required.",
         }
-
-    return {
-        "status": "approved",
-        "reason": "Transaction passed all compliance checks."
-    }
+    return {"status": "approved", "mock": True, "reason": "Passed demo screening only."}
 
 
+class RecoveryRequest(StrictRequest):
+    user_id: UserId
+    safe_address: Address
+    new_owner_address: Address
 
-# GUARDIAN A (SWISSQUOTE) recovery request
 
-class RecoveryRequest(BaseModel):
-    user_id: str
-    safe_address: str
-    new_owner_address: str
-
-# Endpoint where the client or app requests a recovery assistance from Swissquote guardian
-@app.post("/recovery/request")
-def request_recovery(req: RecoveryRequest, db: Session = Depends(get_db)):
-    # 1. Check if the user/wallet exists in our backend registry
-    wallet = db.query(WalletDB).filter(WalletDB.user_id == req.user_id).first()
+def require_recovery_wallet(req: RecoveryRequest, user: str, db: Session) -> None:
+    require_user(req.user_id, user)
+    wallet = db.query(WalletDB).filter(WalletDB.user_id == user).first()
     if not wallet:
         raise HTTPException(status_code=404, detail="Wallet not found for this user")
+    if req.safe_address != wallet.safe_address.lower():
+        raise HTTPException(status_code=409, detail="Safe does not match the registered wallet")
+    if req.new_owner_address == wallet.owner_address.lower():
+        raise HTTPException(status_code=422, detail="Recovery needs a different owner")
 
-    # 2. Simulate security checks, identity verification (KYC check mock)
-    # In a real scenario, this triggers a verification flow.
 
-    return {
-        "success": True,
-        "status": "pending_guardian_approval",
-        "message": "Recovery request registered. Awaiting Swissquote guardian validation.",
-        "data": {
-            "safe_address": req.safe_address,
-            "new_owner_address": req.new_owner_address
-        }
-    }
+@app.post("/recovery/request")
+def request_recovery(
+    req: RecoveryRequest,
+    user: Annotated[str, Depends(current_user)],
+    db: Session = Depends(get_db),
+):
+    require_recovery_wallet(req, user, db)
+    raise HTTPException(status_code=501, detail="Recovery case tracking is not implemented")
 
-# Endpoint representing the Swissquote Guardian signature / approval
+
 @app.post("/recovery/swissquote-approve")
-def swissquote_guardian_approve(req: RecoveryRequest):
-    # The Swissquote backend mock signs or approves the recovery payload
-    # so it can be combined with Guardian A or B to reach the 2/3 threshold[span_1](start_span)[span_1](end_span).
-
-    # For the hackathon prototype, we simulate a cryptographic signature or approval token
-    mock_guardian_signature = "0xMockSwissquoteGuardianSignatureForRecovery123456789"
-
-    return {
-        "success": True,
-        "guardian": "Swissquote",
-        "approved": True,
-        "signature": mock_guardian_signature,
-        "message": "Swissquote guardian has successfully approved the recovery request."
-    }
+def swissquote_guardian_approve(
+    req: RecoveryRequest,
+    user: Annotated[str, Depends(current_user)],
+    db: Session = Depends(get_db),
+):
+    require_recovery_wallet(req, user, db)
+    # A demo session is not identity review or permission to rotate an owner.
+    raise HTTPException(
+        status_code=501, detail="Guardian policy and isolated signer are not implemented"
+    )

@@ -11,9 +11,12 @@ const MAX_MESSAGE_BYTES = 4096;
 export async function signOwnerMessage(
   storage: OwnerKeyStorage,
   message: string,
+  signal?: AbortSignal,
 ): Promise<SignedMessage> {
+  assertNotCancelled(signal);
   validateMessage(message);
   const address = await readOwnerAddress(storage);
+  assertNotCancelled(signal);
 
   // The UI must confirm this exact message before calling us. The adapter
   // enforces authentication on this read; a prior UI authentication is insufficient.
@@ -23,6 +26,7 @@ export async function signOwnerMessage(
   } catch (error) {
     throw storageFailure(error);
   }
+  assertNotCancelled(signal);
 
   try {
     if (
@@ -49,12 +53,24 @@ export async function signOwnerMessage(
       'The owner changed during authentication.',
     );
   }
+  assertNotCancelled(signal);
 
+  let signature;
   try {
-    const signature = await signMessage({ privateKey, message });
-    return { address, signature };
+    signature = await signMessage({ privateKey, message });
   } catch {
     throw new WalletError('SIGNING_FAILED', 'Owner message signing failed.');
+  }
+  assertNotCancelled(signal);
+  return { address, signature };
+}
+
+function assertNotCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new WalletError(
+      'AUTH_CANCELLED',
+      'The signing attempt was cancelled.',
+    );
   }
 }
 

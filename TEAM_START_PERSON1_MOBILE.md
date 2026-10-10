@@ -21,7 +21,7 @@ Deux adresses à ne pas confondre :
 
 ## 2. Ce que la Personne 1 doit implémenter, étape par étape
 
-Aujourd'hui, l'app est un **mock** : 4 écrans (`/`, `/wallet`, `/send`, `/recovery`) avec un solde fictif dans `src/features/wallet/mock.ts`. Aucune clé n'est créée.
+Le parcours natif de création, réouverture et signature de message est maintenant implémenté ; il reste à valider sur téléphone réel. `/` choisit `/create-wallet` ou `/wallet`, et `/sign-test` utilise wallet-core + SecureStore. Solde, Send et Recovery restent mockés ; le navigateur refuse le stockage sécurisé sans fallback.
 
 Structure à connaître :
 
@@ -64,7 +64,7 @@ Les plugins `expo-secure-store` et `expo-local-authentication` (avec le texte Fa
 1. Bouton « Create wallet » sur `WelcomeScreen`.
 2. Appeler la fonction de création de clé fournie par `wallet-core` (Personne 2).
 3. Afficher l'**adresse EOA** retournée (jamais la clé privée).
-4. Gérer les erreurs : pas de code de verrouillage sur le téléphone, biométrie refusée, etc.
+4. Gérer les erreurs : pas de code de verrouillage sur le téléphone, biométrie refusée, création interrompue, etc. Ne jamais remplacer automatiquement une clé après une erreur de stockage.
 
 ### Étape 4 — Réouverture de l'app
 
@@ -161,7 +161,7 @@ Critères de réussite :
 
 Ce jalon correspond au **POC A** du README (section 15.1). Tant qu'il ne passe pas, inutile de travailler sur le design.
 
-Astuce : pour ce jalon, un petit **écran de développement** (ex. `src/app/dev.tsx`) avec trois boutons (créer la clé, afficher l'adresse, signer et vérifier) suffit. Pas besoin de design. La tâche de la Personne 1 est terminée quand l'app tourne sur le téléphone et appelle les fonctions de la Personne 2.
+Astuce : pour ce jalon, un petit **écran de développement** (ex. `src/app/dev.tsx`) avec trois boutons (créer la clé, afficher l'adresse, signer et vérifier) suffit. Pas besoin de design. La tâche de la Personne 1 est terminée après validation sur téléphone de tous les critères ci-dessus, dont restart et annulation. Les tests Node et exports Hermes ne suffisent pas.
 
 Référence SecureStore : https://docs.expo.dev/versions/latest/sdk/securestore/
 

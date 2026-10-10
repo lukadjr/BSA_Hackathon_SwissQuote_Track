@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
+import { AppState, Text, View } from 'react-native';
 import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
 import {
@@ -18,24 +19,50 @@ export default function SignTestScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
+  const focused = useRef(false);
+  const pending = useRef<AbortController | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      focused.current = true;
+      setBusy(pending.current !== null);
+      const subscription = AppState.addEventListener('change', (state) => {
+        // Face ID itself can make iOS inactive; a real background transition
+        // invalidates the attempt even if authentication eventually succeeds.
+        if (state === 'background') pending.current?.abort();
+      });
+      return () => {
+        focused.current = false;
+        pending.current?.abort();
+        subscription.remove();
+      };
+    }, []),
+  );
 
   async function onSign() {
+    if (pending.current !== null) return;
+    if (!focused.current || AppState.currentState !== 'active') return;
+    const controller = new AbortController();
+    pending.current = controller;
     setBusy(true);
     setError(null);
     setResult(null);
     try {
-      // Face ID / biometrics are requested inside signMessage, on every call.
-      const { address, signature } = await signMessage(TEST_MESSAGE);
+      const { address, signature } = await signMessage(TEST_MESSAGE, {
+        signal: controller.signal,
+      });
       const valid = await verifyMessage({
         address,
         message: TEST_MESSAGE,
         signature,
       });
-      setResult({ address, signature, valid });
+      if (!controller.signal.aborted && focused.current)
+        setResult({ address, signature, valid });
     } catch (e) {
-      setError(describeWalletError(e));
+      if (focused.current) setError(describeWalletError(e));
     } finally {
-      setBusy(false);
+      pending.current = null;
+      if (focused.current) setBusy(false);
     }
   }
 

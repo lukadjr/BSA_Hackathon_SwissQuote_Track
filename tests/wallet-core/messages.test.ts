@@ -32,6 +32,59 @@ describe('owner messages', () => {
     vi.clearAllMocks();
   });
 
+  it('does not unlock an already cancelled attempt', async () => {
+    const { wallet, storage } = setup();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      wallet.signMessage('Test', { signal: controller.signal }),
+    ).rejects.toMatchObject({ code: 'AUTH_CANCELLED' });
+    expect(storage.readPrivateKeyForSigning).not.toHaveBeenCalled();
+    expect(viemSignMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not sign when navigation or background cancels during authentication', async () => {
+    const { wallet, storage } = setup();
+    const controller = new AbortController();
+    vi.mocked(storage.readPrivateKeyForSigning).mockImplementationOnce(
+      async () => {
+        controller.abort();
+        return TEST_KEY;
+      },
+    );
+    await expect(
+      wallet.signMessage('Test', { signal: controller.signal }),
+    ).rejects.toMatchObject({ code: 'AUTH_CANCELLED' });
+    expect(viemSignMessage).not.toHaveBeenCalled();
+  });
+
+  it('rechecks cancellation after owner metadata is read again', async () => {
+    const { wallet, storage } = setup();
+    const controller = new AbortController();
+    vi.mocked(storage.readAddress)
+      .mockResolvedValueOnce(ADDRESS)
+      .mockImplementationOnce(async () => {
+        controller.abort();
+        return ADDRESS;
+      });
+    await expect(
+      wallet.signMessage('Test', { signal: controller.signal }),
+    ).rejects.toMatchObject({ code: 'AUTH_CANCELLED' });
+    expect(viemSignMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not return a result cancelled while the signer was completing', async () => {
+    const { wallet } = setup();
+    const controller = new AbortController();
+    vi.mocked(viemSignMessage).mockImplementationOnce(async () => {
+      controller.abort();
+      return `0x${'0'.repeat(130)}`;
+    });
+    await expect(
+      wallet.signMessage('Test', { signal: controller.signal }),
+    ).rejects.toMatchObject({ code: 'AUTH_CANCELLED' });
+  });
+
   it('signs and verifies the exact UTF-8 message through the public API', async () => {
     const { wallet, storage } = setup();
     const message = 'Swissquote test: café 🏦';

@@ -1,7 +1,7 @@
 {
   "name": "@swissquote/mobile",
   "version": "0.1.0",
-  "main": "expo-router/entry",
+  "main": "./index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
     "@swissquote/wallet-core": "0.1.0",

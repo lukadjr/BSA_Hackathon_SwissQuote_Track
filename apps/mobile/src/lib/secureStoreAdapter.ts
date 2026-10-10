@@ -7,7 +7,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 // Public data (address) is stored unprotected; the private key is stored with
-// requireAuthentication, so EVERY read opens Face ID / biometrics / passcode.
+// requireAuthentication. Actual prompt presentation is controlled by the OS.
 const ADDRESS_KEY = 'swissquote.owner.address';
 const PRIVATE_KEY = 'swissquote.owner.privateKey';
 // Written before the private key. If it exists but the address does not, a
@@ -56,6 +56,15 @@ export const secureStoreAdapter: OwnerKeyStorage = {
     assertNative();
     try {
       const value = await SecureStore.getItemAsync(ADDRESS_KEY, PUBLIC_OPTIONS);
+      if (
+        value === null &&
+        (await SecureStore.getItemAsync(PENDING_KEY, PUBLIC_OPTIONS)) !== null
+      ) {
+        throw fail(
+          'STORAGE_FAILED',
+          'Wallet creation was interrupted. Do not create a replacement key.',
+        );
+      }
       return value === null ? null : (value as Address);
     } catch (e) {
       throw mapNativeError(e);
@@ -82,6 +91,11 @@ export const secureStoreAdapter: OwnerKeyStorage = {
           'A previous wallet creation was interrupted. Refusing to overwrite.',
         );
       }
+      if (
+        (await SecureStore.getItemAsync(PRIVATE_KEY, SECRET_OPTIONS)) !== null
+      ) {
+        throw fail('WALLET_ALREADY_EXISTS', 'An owner key already exists.');
+      }
       if (!SecureStore.canUseBiometricAuthentication()) {
         throw fail(
           'AUTH_UNAVAILABLE',
@@ -93,16 +107,25 @@ export const secureStoreAdapter: OwnerKeyStorage = {
         await SecureStore.setItemAsync(PRIVATE_KEY, privateKey, SECRET_OPTIONS);
         await SecureStore.setItemAsync(ADDRESS_KEY, address, PUBLIC_OPTIONS);
       } catch (e) {
-        // Roll back so a failed attempt leaves nothing half-written.
-        await SecureStore.deleteItemAsync(PRIVATE_KEY, SECRET_OPTIONS).catch(
-          () => {},
-        );
-        await SecureStore.deleteItemAsync(ADDRESS_KEY, PUBLIC_OPTIONS).catch(
-          () => {},
-        );
-        await SecureStore.deleteItemAsync(PENDING_KEY, PUBLIC_OPTIONS).catch(
-          () => {},
-        );
+        // Keep the marker unless both values are confirmed absent. Native
+        // deletion can fail or silently leave a key behind; never overwrite it.
+        try {
+          await SecureStore.deleteItemAsync(PRIVATE_KEY, SECRET_OPTIONS);
+          await SecureStore.deleteItemAsync(ADDRESS_KEY, PUBLIC_OPTIONS);
+          const remainingKey = await SecureStore.getItemAsync(
+            PRIVATE_KEY,
+            SECRET_OPTIONS,
+          );
+          const remainingAddress = await SecureStore.getItemAsync(
+            ADDRESS_KEY,
+            PUBLIC_OPTIONS,
+          );
+          if (remainingKey === null && remainingAddress === null) {
+            await SecureStore.deleteItemAsync(PENDING_KEY, PUBLIC_OPTIONS);
+          }
+        } catch {
+          // A retry remains blocked by the marker after uncertain cleanup.
+        }
         throw e;
       }
     } catch (e) {

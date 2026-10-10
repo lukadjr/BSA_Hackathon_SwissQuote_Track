@@ -6,18 +6,18 @@ export default function RecoveryScreen() {
     <Screen>
       <Text className="text-2xl font-bold text-ink">Recover together</Text>
       <Text className="text-base leading-6 text-muted">
-        The planned recovery requires Swissquote and one independent contact.
-        Swissquote cannot recover your wallet alone.
+        The planned recovery needs any two of Swissquote, Contact A and Contact
+        B. Your contacts can help you recover without Swissquote.
       </Text>
       <View className="bg-white border border-line rounded-3xl p-6 gap-5">
         <Text className="font-semibold text-ink">
-          1. Verify your identity with Swissquote
+          1. Ask two guardians to approve
         </Text>
         <Text className="font-semibold text-ink">
-          2. Get approval from Contact A or B
+          2. Wait through the 7-day challenge period
         </Text>
         <Text className="font-semibold text-ink">
-          3. Wait, then restore access
+          3. Restore access if the current owner has not cancelled
         </Text>
       </View>
       <Text className="text-sm leading-5 text-muted">

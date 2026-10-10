@@ -26,6 +26,8 @@ function setupWallet(storage: OwnerKeyStorage) {
   EIP-191 signing. It requests a fresh protected key read, validates the key against
   the owner address, and rechecks the owner after authentication. It returns only
   the registered address and signature; no key or signer is cached.
+  `signMessage(message, { signal })` accepts an AbortSignal; aborting during
+  authentication prevents signing, and a cancelled result is never returned.
 - `verifyMessage()` performs public EOA verification with viem. Wrong owners,
   altered messages and malformed inputs return `false`; no storage is accessed.
   This API does not sign Safe transactions or verify contract-wallet signatures.
@@ -37,8 +39,10 @@ function setupWallet(storage: OwnerKeyStorage) {
   The mobile team must verify native runtime support before using this on a phone;
   failures return `KEY_GENERATION_FAILED` without an insecure fallback.
 - The UI must display and confirm the exact message before calling `signMessage()`.
-  The UI/native adapter must cancel pending access when the app backgrounds or the
-  confirmed payload changes. The core cannot observe native lifecycle events.
+  The mobile test screen aborts the attempt on background, navigation or unmount.
+  The OS authentication dialog cannot be dismissed by this API; any unlocked key
+  is discarded when the aborted read completes. Future editable previews must
+  also abort when the confirmed payload changes.
   Raw storage/signing errors are sanitized;
   the trusted adapter must provide safe messages for its own `WalletError` values.
 - Run `npm test` for creation and message-signing tests.
@@ -47,4 +51,5 @@ function setupWallet(storage: OwnerKeyStorage) {
 The phone demo must create an owner, preserve its address after reopening, sign a
 confirmed test message, and verify the signature. Test cancellation and unavailable
 keys on a real device. Safe deployment, recovery kits and transaction signing remain
-separate implementation tasks; native integration is still required for the phone milestone.
+separate implementation tasks; the SecureStore adapter is integrated, with real-device
+validation still required for the phone milestone.
