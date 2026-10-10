@@ -16,7 +16,10 @@ from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
+from app.config import load_environment
 from app.wallet_registry.control import CHAIN_ID, ControlError, verify_control
+
+load_environment()
 
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./swissquote_mock.db")
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -84,7 +87,7 @@ app = FastAPI(
     version="0.2.0",
     description=(
         "Mock bank identity and screening; real signed Sepolia Safe-control verification. "
-        "Bank transfers are authorization previews only. Recovery remains separate."
+        "Funding uses a separate testnet treasury worker. Recovery remains separate."
     ),
 )
 bearer = HTTPBearer(auto_error=False)
@@ -598,3 +601,10 @@ def swissquote_guardian_approve(
     raise HTTPException(
         status_code=501, detail="Guardian policy and isolated signer are not implemented"
     )
+
+
+# Import after the bank dependencies/models exist; funding adds its own table.
+from app.funding.routes import router as funding_router  # noqa: E402
+
+app.include_router(funding_router)
+Base.metadata.create_all(bind=engine)

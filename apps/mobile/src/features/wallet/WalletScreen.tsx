@@ -77,13 +77,14 @@ export default function WalletScreen() {
         onPress={() => router.push('/link-wallet')}
       />
       <Button label="Send" onPress={() => router.push('/send')} />
+      <Button label="Add money" onPress={() => router.push('/add-money')} />
       <View className="bg-white border border-line rounded-3xl p-6 gap-3">
         <Text className="text-lg font-semibold text-ink">Receive</Text>
         <Text className="text-base leading-6 text-muted">
           {account
             ? account.deployed
               ? 'Safe deployed and configuration verified.'
-              : 'Safe address reserved. Your first transfer deploys it.'
+              : 'Safe address reserved. Open Add money to deploy it through the demo bank.'
             : 'Configure the Sepolia connection to load your Safe.'}
         </Text>
         {account && (
@@ -98,8 +99,9 @@ export default function WalletScreen() {
               Test-token contract: {account.tokenAddress}
             </Text>
             <Text className="text-sm text-muted">
-              Fund this Safe address with Sepolia ETH and the configured test
-              token.
+              Add test tokens from the demo bank or receive the configured token
+              at this Safe address. Outgoing fee sponsorship is a separate
+              integration.
             </Text>
           </>
         )}

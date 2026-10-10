@@ -197,15 +197,20 @@ export default function LinkWalletScreen() {
         !loading && <Button label="Refresh verification" onPress={retry} />
       )}
       <Button
+        label="Set up wallet / add money"
+        secondary
+        disabled={busy}
+        onPress={() => router.push('/add-money')}
+      />
+      <Button
         label="Open testnet wallet"
         secondary
         disabled={busy}
         onPress={() => router.replace('/wallet')}
       />
       <Text className="text-sm text-muted">
-        Bank linking requires a deployed Safe. In this prototype, the first
-        testnet transfer deploys it; bank transfers stay blocked until linking
-        succeeds.
+        Bank linking requires a deployed Safe. Use Add money to deploy it first;
+        bank funding stays blocked until linking succeeds.
       </Text>
     </Screen>
   );

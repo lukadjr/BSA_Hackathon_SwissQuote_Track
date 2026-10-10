@@ -78,7 +78,7 @@ function config() {
   return { baseUrl: baseUrl.replace(/\/+$/, ''), token };
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
   body: unknown,
   signal?: AbortSignal,
