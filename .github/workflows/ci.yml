@@ -25,6 +25,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Some backend tests shell out to the pinned TypeScript builders (tsx, viem).
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
