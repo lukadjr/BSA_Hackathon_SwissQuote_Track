@@ -16,7 +16,13 @@ export function useWalletOverview() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
-  const refresh = useCallback(() => setTick((n) => n + 1), []);
+  const refresh = useCallback(() => {
+    setAccount(null);
+    setLinked(null);
+    setError(null);
+    setLoading(true);
+    setTick((n) => n + 1);
+  }, []);
 
   useFocusEffect(refresh);
 

@@ -1,12 +1,14 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
+import { DevResetDatabaseButton } from '../../components/DevResetDatabaseButton';
 import { IconTile, Wordmark } from '../../components/ui';
 import { getGuardianAddress, listGuardedWallets } from '../../lib/guardianKey';
 import { listGuardianRequests } from '../../lib/recoveryApi';
+import { readPausedOnboarding } from '../../lib/onboardingNavigation';
 import { colors } from '../../theme/colors';
 
 /** First screen: log in with Swissquote, or help a friend as a guardian. */
@@ -93,7 +95,15 @@ export default function WelcomeScreen() {
         <Button
           label="Log in with Swissquote"
           icon="person.crop.circle.fill"
-          onPress={() => router.push('/login')}
+          onPress={() => {
+            void readPausedOnboarding()
+              .then((route) =>
+                route ? router.dismissTo(route) : router.push('/login'),
+              )
+              .catch(() =>
+                Alert.alert('Could not resume', 'Please try again.'),
+              );
+          }}
         />
         <Button
           label="Be a guardian"
@@ -104,6 +114,11 @@ export default function WelcomeScreen() {
         <Text className="pb-2 text-center text-xs text-muted">
           Demo on the Sepolia testnet · no real funds
         </Text>
+        {__DEV__ && (
+          <View className="items-center pb-2">
+            <DevResetDatabaseButton />
+          </View>
+        )}
       </SafeAreaView>
     </View>
   );

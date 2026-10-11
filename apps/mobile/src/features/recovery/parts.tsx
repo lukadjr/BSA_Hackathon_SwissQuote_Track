@@ -246,6 +246,11 @@ export function FriendInvite({
           <ActivityIndicator />
           <Text className="text-sm text-muted">Waiting for your friend…</Text>
         </View>
+        <Button
+          label="Generate a new code"
+          variant="ghost"
+          onPress={restart}
+        />
         <ErrorText error={scanError} />
         <Button
           label="Scan my friend’s code"

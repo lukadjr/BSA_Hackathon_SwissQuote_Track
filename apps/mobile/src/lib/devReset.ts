@@ -1,10 +1,8 @@
 // Development builds only: wipes this phone's wallet to replay onboarding.
-import { clearWalletLinked } from './linkStatus';
-import { deleteOwnerWalletForDev } from './secureStoreAdapter';
-import { clearSafeForDev } from './safeWallet';
+import { WalletError } from '@swissquote/wallet-core';
+import { resetWallet } from './walletSession';
 
 export async function resetWalletForDev(): Promise<void> {
-  await clearWalletLinked();
-  await deleteOwnerWalletForDev();
-  await clearSafeForDev();
+  if (!__DEV__) throw new WalletError('NOT_IMPLEMENTED', 'Development only.');
+  await resetWallet();
 }

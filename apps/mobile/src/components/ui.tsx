@@ -2,6 +2,7 @@
 import type { PropsWithChildren, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { colors } from '../theme/colors';
+import { WalletLogo } from './WalletLogo';
 import { Icon, type IconName } from './Icon';
 
 /** Round icon tile used in lists (Revolut-style). */
@@ -259,19 +260,17 @@ export function ErrorText({ error }: { error: string | null }) {
 export function Wordmark({ light = false }: { light?: boolean }) {
   return (
     <View className="flex-row items-center gap-2">
-      <View
-        className={`h-8 w-8 items-center justify-center rounded-lg ${light ? 'bg-white' : 'bg-brand'}`}
-      >
-        <Text
-          className={`text-lg font-black ${light ? 'text-brand' : 'text-white'}`}
-        >
-          S
-        </Text>
-      </View>
+      {light ? (
+        <View className="h-11 w-11 items-center justify-center rounded-full bg-white">
+          <WalletLogo size={36} />
+        </View>
+      ) : (
+        <WalletLogo size={36} />
+      )}
       <Text
         className={`text-xl font-extrabold tracking-tight ${light ? 'text-white' : 'text-ink'}`}
       >
-        Swissquote
+        Swissquote Wallet
       </Text>
     </View>
   );

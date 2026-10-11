@@ -165,7 +165,9 @@ export default function SetupScreen() {
       if (stage === 'link') setChallenge(null);
     } finally {
       pending.current = null;
-      if (focused.current) setBusy(false);
+      // A paused screen remains mounted. Clear its spinner after an aborted
+      // attempt too, so returning from welcome never leaves setup disabled.
+      setBusy(false);
     }
   }
 

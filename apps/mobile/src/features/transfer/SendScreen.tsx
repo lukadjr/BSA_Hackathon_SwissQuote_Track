@@ -1,3 +1,5 @@
+import { shortAddress, WalletError } from '@swissquote/wallet-core';
+import { formatUnits } from 'viem';
 import type {
   ConfirmedTransfer,
   SubmittedTransfer,
@@ -6,9 +8,17 @@ import type {
 } from '@swissquote/wallet-core';
 import * as Linking from 'expo-linking';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
-import { AppState, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  AppState,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Button } from '../../components/Button';
+import { Icon } from '../../components/Icon';
+import { colors } from '../../theme/colors';
 import { Screen } from '../../components/Screen';
 import {
   getSafeAccount,
@@ -40,7 +50,7 @@ export default function SendScreen() {
         .then(([pending, last]) => {
           if (focused.current) {
             setPendingTransfer(pending);
-            setResult(last);
+            setResult(pending ? null : last);
             if (last) void recordSentTransfer(last);
           }
         })
@@ -72,14 +82,24 @@ export default function SendScreen() {
     request.current = controller;
     setBusy(true);
     setError(null);
+    let failure: unknown;
     try {
       await action(controller.signal);
     } catch (e) {
+      failure = e;
       if (focused.current) setError(describeWalletError(e));
     } finally {
       try {
         const pending = await transferActivity.readPending();
-        if (focused.current) setPendingTransfer(pending);
+        if (focused.current) {
+          setPendingTransfer(pending);
+          if (
+            pending &&
+            (!(failure instanceof WalletError) ||
+              ['NETWORK_FAILED', 'TRANSFER_PENDING'].includes(failure.code))
+          )
+            setError(null);
+        }
       } catch (e) {
         if (focused.current) setError(describeWalletError(e));
       }
@@ -87,16 +107,67 @@ export default function SendScreen() {
       if (focused.current) setBusy(false);
     }
   }
-  async function checkStatus(submitted: SubmittedTransfer) {
-    const confirmed = await getSafeWallet().confirmTransfer(submitted);
-    if (!focused.current) return;
-    if (confirmed) {
-      void recordSentTransfer(confirmed);
-      setResult(confirmed);
-      setPreview(null);
-      setPendingTransfer(null);
-    } else setError('Not confirmed yet. Check again shortly; do not resend.');
-  }
+  useEffect(() => {
+    if (!pendingTransfer || error) return;
+    let active = true;
+    let checking = false;
+    async function poll() {
+      if (
+        !active ||
+        checking ||
+        request.current ||
+        !focused.current ||
+        AppState.currentState !== 'active'
+      )
+        return;
+      checking = true;
+      try {
+        const confirmed = await getSafeWallet().confirmTransfer(
+          pendingTransfer!,
+        );
+        if (!active || !focused.current) return;
+        if (confirmed) {
+          await recordSentTransfer(confirmed);
+          setResult(confirmed);
+          setPendingTransfer(null);
+          setError(null);
+        }
+      } catch (e) {
+        // Connection failures and normal inclusion delays keep the pending state.
+        if (
+          active &&
+          focused.current &&
+          e instanceof WalletError &&
+          [
+            'TRANSFER_FAILED',
+            'VERIFICATION_FAILED',
+            'TRANSFER_EXPIRED',
+          ].includes(e.code)
+        ) {
+          setError(describeWalletError(e));
+          try {
+            const remaining = await transferActivity.readPending();
+            if (active && focused.current) setPendingTransfer(remaining);
+          } catch {
+            // Keep tracking and stop polling until storage can be read again.
+          }
+        }
+      } finally {
+        checking = false;
+      }
+    }
+    void poll();
+    const timer = setInterval(() => void poll(), 3000);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void poll();
+    });
+    return () => {
+      active = false;
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [pendingTransfer, error]);
+
   function edit(set: (value: string) => void, value: string) {
     request.current?.abort();
     set(value);
@@ -172,20 +243,8 @@ export default function SendScreen() {
           <Text selectable className="text-sm text-muted">
             Recipient: {preview.recipient}
           </Text>
-          <Text selectable className="text-sm text-muted">
-            Token: {preview.tokenAddress}
-          </Text>
-          <Text selectable className="text-sm text-muted">
-            From Safe: {preview.safeAddress}
-          </Text>
           <Text className="text-sm text-muted">
             Network fee: covered by Swissquote
-          </Text>
-          <Text className="text-sm text-muted">
-            The Swissquote treasury pays the network fee.{' '}
-            {preview.deploysSafe
-              ? 'This also deploys your Safe.'
-              : 'Your Safe is deployed.'}
           </Text>
           <Button
             label={busy ? 'Signing / submitting…' : 'Authenticate & send'}
@@ -200,29 +259,34 @@ export default function SendScreen() {
                   setPendingTransfer(submitted);
                   setPreview(null);
                 }
-                await checkStatus(submitted);
               })
             }
           />
         </View>
       )}
-      {pendingTransfer && (
-        <View className="bg-white border border-line rounded-3xl p-6 gap-3">
-          <Text className="text-lg font-semibold text-ink">
-            Awaiting confirmation
+      {pendingTransfer && !error && (
+        <View
+          accessibilityLiveRegion="polite"
+          className="bg-card border border-line rounded-3xl p-6 gap-4"
+        >
+          <View className="flex-row items-center gap-3">
+            <View className="h-12 w-12 rounded-full bg-brandSoft items-center justify-center">
+              <ActivityIndicator color="#FF5722" />
+            </View>
+            <View className="flex-1 gap-1">
+              <Text className="text-lg font-bold text-ink">Pending</Text>
+              <Text className="text-sm text-muted">
+                Your transfer is being confirmed
+              </Text>
+            </View>
+          </View>
+          <Text className="text-sm leading-6 text-muted">
+            You’re all set. We’ll update this automatically once your transfer
+            is confirmed.
           </Text>
-          <Text className="text-sm text-muted">
-            Submission may have succeeded even if the connection dropped. Check
-            this operation before sending again.
-          </Text>
-          <Text selectable className="text-xs text-ink">
-            {pendingTransfer.userOperationHash}
-          </Text>
-          <Button
-            label={busy ? 'Checking…' : 'Check status'}
-            disabled={busy}
-            onPress={() => void run(async () => checkStatus(pendingTransfer))}
-          />
+          <View className="h-1 rounded-full bg-brandSoft">
+            <View className="h-1 w-1/2 rounded-full bg-brand" />
+          </View>
         </View>
       )}
       {error && (
@@ -238,29 +302,30 @@ export default function SendScreen() {
           accessibilityLiveRegion="polite"
           className="bg-white border border-line rounded-3xl p-6 gap-3"
         >
-          <Text className="text-lg font-semibold text-ink">
-            Transfer confirmed on Sepolia
+          <View className="flex-row items-center gap-3">
+            <View className="h-12 w-12 rounded-full bg-successSoft items-center justify-center">
+              <Icon
+                name="checkmark.circle.fill"
+                size={26}
+                color={colors.success}
+              />
+            </View>
+            <View className="flex-1 gap-1">
+              <Text className="text-lg font-bold text-ink">
+                Transfer confirmed
+              </Text>
+              <Text className="text-sm text-muted">
+                {formatUnits(BigInt(result.amountUnits), result.decimals)} USDC
+                sent
+              </Text>
+            </View>
+          </View>
+          <Text selectable className="text-sm text-muted">
+            To {shortAddress(result.recipient)}
           </Text>
           <Text className="text-sm text-muted">
-            Two confirmations · Safe configuration and Transfer event verified
+            Wallet balance: {result.senderBalanceAfter} USDC
           </Text>
-          <Text selectable className="text-xs text-ink">
-            {result.transactionHash}
-          </Text>
-          <Text className="text-sm text-muted">
-            Safe balance: {result.senderBalanceBefore} →{' '}
-            {result.senderBalanceAfter}
-          </Text>
-          <Text className="text-sm text-muted">
-            Recipient balance: {result.recipientBalanceBefore} →{' '}
-            {result.recipientBalanceAfter}
-          </Text>
-          {!result.balanceChangesMatch && (
-            <Text className="text-sm text-muted">
-              Block balance changes differ from this transfer; other activity
-              may have occurred in the same block.
-            </Text>
-          )}
           <Button
             label="View on Sepolia explorer"
             secondary

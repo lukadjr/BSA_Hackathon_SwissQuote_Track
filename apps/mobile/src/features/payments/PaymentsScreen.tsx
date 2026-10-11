@@ -32,6 +32,8 @@ export default function PaymentsScreen() {
     useCallback(() => {
       void tick;
       let active = true;
+      setItems(null);
+      setError(null);
       (async () => {
         const account = await getSafeAccount();
         const [bank, sent] = await Promise.all([

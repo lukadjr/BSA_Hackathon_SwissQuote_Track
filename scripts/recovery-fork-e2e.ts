@@ -9,6 +9,9 @@
 import assert from 'node:assert/strict';
 import {
   createPublicClient,
+  encodeAbiParameters,
+  erc20Abi,
+  keccak256,
   createTestClient,
   http,
   isAddressEqual,
@@ -268,8 +271,52 @@ async function main() {
     ],
     relayerKey,
   );
+  // Seed a non-zero USDC balance on this local fork only, without a faucet.
+  // Circle's balance mapping slot differs between implementation versions.
+  for (let slot = 0n; slot < 30n; slot++) {
+    const index = keccak256(
+      encodeAbiParameters(
+        [{ type: 'address' }, { type: 'uint256' }],
+        [safe, slot],
+      ),
+    );
+    const previous = await publicClient.getStorageAt({
+      address: TOKEN,
+      slot: index,
+    });
+    await test.setStorageAt({
+      address: TOKEN,
+      index,
+      value: `0x${8_500_000n.toString(16).padStart(64, '0')}`,
+    });
+    const balance = await publicClient.readContract({
+      address: TOKEN,
+      abi: erc20Abi,
+      functionName: 'balanceOf',
+      args: [safe],
+    });
+    if (balance === 8_500_000n) break;
+    await test.setStorageAt({
+      address: TOKEN,
+      index,
+      value: previous ?? `0x${'0'.repeat(64)}`,
+    });
+  }
+  const originalBalance = await phoneWallet(ownerKey).getAccount();
+  assert.equal(
+    originalBalance.tokenBalance,
+    '8.5',
+    'recovery must be tested with a funded Safe',
+  );
   await warp(RECOVERY_PERIOD_SECONDS.threeDays + 1);
   await finalize(safe, relayerKey);
+  const recoveredBalance = await phoneWallet(owner1Key, safe).getAccount();
+  assert.equal(recoveredBalance.safeAddress, originalBalance.safeAddress);
+  assert.equal(recoveredBalance.tokenBalance, originalBalance.tokenBalance);
+  assert.equal(recoveredBalance.ethBalance, originalBalance.ethBalance);
+  ok(
+    `Recovery preserves token balance ${recoveredBalance.tokenBalance} and ETH balance ${recoveredBalance.ethBalance}`,
+  );
   assert.deepEqual(await recovery.readOwners(safe), [owner1]);
   state = await phoneWallet(owner1Key, safe).getSecurityState();
   assert.ok(state.deployed && isAddressEqual(state.safeAddress, safe));

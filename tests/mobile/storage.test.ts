@@ -11,7 +11,10 @@ const store = vi.hoisted(() => ({
 }));
 vi.mock('expo-secure-store', () => store);
 vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
-import { secureStoreAdapter } from '../../apps/mobile/src/lib/secureStoreAdapter';
+import {
+  disconnectOwnerWallet,
+  secureStoreAdapter,
+} from '../../apps/mobile/src/lib/secureStoreAdapter';
 
 const ADDRESS = 'swissquote.owner.address';
 const KEY = 'swissquote.owner.privateKey';
@@ -121,4 +124,25 @@ describe('native owner storage', () => {
       new WalletError('AUTH_CANCELLED', 'Authentication cancelled.'),
     );
   });
+});
+
+it('disconnects the current owner and lets a different wallet be created on this phone', async () => {
+  await secureStoreAdapter.saveNewWallet(wallet);
+  store.values.set(
+    'swissquote.guardian.privateKey',
+    'independent-guardian-key',
+  );
+  await disconnectOwnerWallet();
+  expect(await secureStoreAdapter.readAddress()).toBeNull();
+  expect(store.values.has(KEY)).toBe(false);
+  expect(store.values.has(PENDING)).toBe(false);
+  expect(store.values.get('swissquote.guardian.privateKey')).toBe(
+    'independent-guardian-key',
+  );
+  const replacement = {
+    address: `0x${'2'.repeat(40)}` as const,
+    privateKey: `0x${'2'.repeat(64)}` as const,
+  };
+  await secureStoreAdapter.saveNewWallet(replacement);
+  expect(await secureStoreAdapter.readAddress()).toBe(replacement.address);
 });

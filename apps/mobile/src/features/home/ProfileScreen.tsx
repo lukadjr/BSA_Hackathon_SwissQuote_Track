@@ -6,24 +6,25 @@ import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
 import { Divider, ListRow, Section } from '../../components/ui';
 import { useWalletOverview } from '../../hooks/useWalletOverview';
-import { clearActivityForDev } from '../../lib/activity';
-import { clearSession, getSession } from '../../lib/auth';
-import { resetWalletForDev } from '../../lib/devReset';
+import { getSession } from '../../lib/auth';
+import { logoutWallet, resetWallet } from '../../lib/walletSession';
 import { describeWalletError } from '../../lib/wallet';
 
-function confirmDevReset() {
+function confirmReset() {
   Alert.alert(
     'Reset wallet?',
-    'Development only. This permanently deletes the key and Safe tracking on this phone. Any assets in the old Safe become inaccessible.',
+    'Deletes all app data on this phone, including your login, owner and guardian keys, recovery requests and history. You will need recovery to access your existing wallet. This also removes your ability to approve recoveries for friends from this phone.',
     [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Delete key',
+        text: 'Reset wallet',
         style: 'destructive',
         onPress: () => {
-          resetWalletForDev()
-            .then(() => clearActivityForDev())
-            .then(() => router.replace('/start'))
+          resetWallet()
+            .then(() => {
+              if (router.canDismiss()) router.dismissAll();
+              router.replace('/welcome');
+            })
             .catch((e: unknown) =>
               Alert.alert('Reset failed', describeWalletError(e)),
             );
@@ -59,7 +60,7 @@ export default function ProfileScreen() {
         <Text className="text-sm text-muted">Swissquote demo account</Text>
       </View>
 
-      <Section title="Swissquote">
+      <Section title="Swissquote Wallet">
         <ListRow
           icon="link"
           tone={linked ? 'success' : 'warning'}
@@ -100,12 +101,6 @@ export default function ProfileScreen() {
           title="Owner key (this phone)"
           subtitle={account ? shortAddress(account.ownerAddress) : '…'}
         />
-        <Divider />
-        <ListRow
-          icon="signature"
-          title="Sign a test message"
-          onPress={() => router.push('/sign-test')}
-        />
       </Section>
 
       <Button
@@ -113,21 +108,30 @@ export default function ProfileScreen() {
         variant="secondary"
         icon="rectangle.portrait.and.arrow.right"
         onPress={() => {
-          clearSession()
-            .then(() => {
-              if (router.canDismiss()) router.dismissAll();
-              router.replace('/welcome');
-            })
-            .catch((e) => Alert.alert('Logout failed', describeWalletError(e)));
+          Alert.alert(
+            'Disconnect this phone?',
+            'Logging out removes the wallet key from this phone. You will need your guardians to recover this wallet.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Log out',
+                style: 'destructive',
+                onPress: () => {
+                  logoutWallet()
+                    .then(() => {
+                      if (router.canDismiss()) router.dismissAll();
+                      router.replace('/welcome');
+                    })
+                    .catch((e) =>
+                      Alert.alert('Logout failed', describeWalletError(e)),
+                    );
+                },
+              },
+            ],
+          );
         }}
       />
-      {__DEV__ && (
-        <Button
-          label="Reset wallet (dev only)"
-          variant="ghost"
-          onPress={confirmDevReset}
-        />
-      )}
+      <Button label="Reset wallet" variant="ghost" onPress={confirmReset} />
       <Text className="text-center text-xs text-muted">
         Sepolia testnet only · your key never leaves this phone
       </Text>

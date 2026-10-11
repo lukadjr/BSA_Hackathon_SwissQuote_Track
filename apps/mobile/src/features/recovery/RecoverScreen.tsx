@@ -443,7 +443,7 @@ function Approvals({
           <Text key={a.guardian} className="text-sm text-ink">
             ✓{' '}
             {swissquote && isAddressEqual(a.guardian, swissquote)
-              ? 'Swissquote'
+              ? 'Swissquote Wallet'
               : shortAddress(a.guardian)}
           </Text>
         ))}
@@ -494,7 +494,9 @@ function Approvals({
           </Card>
 
           <Card>
-            <Text className="text-lg font-semibold text-ink">Swissquote</Text>
+            <Text className="text-lg font-semibold text-ink">
+              Swissquote Wallet
+            </Text>
             {has(swissquote) ? (
               <Text className="text-sm text-ink">✓ Approved</Text>
             ) : (

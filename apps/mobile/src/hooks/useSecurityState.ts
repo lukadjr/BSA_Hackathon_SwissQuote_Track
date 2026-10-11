@@ -20,6 +20,9 @@ export function useSecurityState() {
 
   useFocusEffect(
     useCallback(() => {
+      setState(null);
+      setStatus(null);
+      setError(null);
       refresh();
       const timer = setInterval(refresh, 30_000);
       const sub = AppState.addEventListener(

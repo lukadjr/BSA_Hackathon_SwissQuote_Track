@@ -1,6 +1,7 @@
 // Backend client for the demo API (backend/). Only public data travels here:
 // addresses, challenge ids and signatures. Never send a private key.
 import type { Address, Signature } from './wallet';
+import { clearSession, getSessionToken } from './auth';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -83,8 +84,10 @@ export async function request<T>(
   body: unknown,
   signal?: AbortSignal,
   method: 'GET' | 'POST' = 'POST',
+  tokenOverride?: string,
 ): Promise<T> {
-  const { baseUrl, token } = config();
+  const { baseUrl, token: defaultToken } = config();
+  const token = tokenOverride ?? (await getSessionToken()) ?? defaultToken;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const onAbort = () => controller.abort();
@@ -124,11 +127,41 @@ export async function request<T>(
       );
     }
   }
+  if (
+    response.status === 401 &&
+    !tokenOverride &&
+    token !== defaultToken &&
+    response.headers?.get('WWW-Authenticate')?.toLowerCase().includes('bearer')
+  )
+    await clearSession();
   if (response.status === 401 || response.status === 403) {
     throw new ApiError(
       'UNAUTHORIZED',
       'The server refused this request.',
       response.status,
+    );
+  }
+  if (response.status === 409) {
+    const messages: Record<string, string> = {
+      'Finish the existing bank operation first':
+        'An operation is already pending for this account. Refresh to resume it.',
+      'Wallet changed; relink required':
+        'This account is registered to a different wallet. Use your own username or recover the original wallet.',
+      'Safe does not match the registered wallet':
+        'This wallet does not belong to the logged-in demo account. Log in with its original username.',
+      'Wait for queued or submitted transactions before resetting the database':
+        'A transaction is already queued or submitted. Wait for it to finish before resetting the database.',
+      'Insufficient demo bank token balance':
+        'The demo treasury does not have enough test tokens.',
+    };
+    const detail = await response.json().catch(() => null);
+    throw new ApiError(
+      'REJECTED',
+      typeof detail?.detail === 'string' &&
+        Object.prototype.hasOwnProperty.call(messages, detail.detail)
+        ? messages[detail.detail]
+        : 'This operation conflicts with the current account state. Refresh its status.',
+      409,
     );
   }
   if (response.status >= 400 && response.status < 500) {
@@ -147,8 +180,9 @@ export async function request<T>(
 
 export function getClientIdentity(
   signal?: AbortSignal,
+  tokenOverride?: string,
 ): Promise<ClientIdentity> {
-  return request('/auth/me', undefined, signal, 'GET');
+  return request('/auth/me', undefined, signal, 'GET', tokenOverride);
 }
 
 export function getLinkStatus(signal?: AbortSignal): Promise<LinkStatus> {

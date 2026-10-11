@@ -93,7 +93,7 @@ export function roleTitle(role: GuardianRole | undefined): string {
     case 'backup':
       return 'Your backup phrase';
     case 'swissquote':
-      return 'Swissquote';
+      return 'Swissquote Wallet';
     case 'friend':
       return 'Trusted friend';
     default:
@@ -112,6 +112,18 @@ export async function readRecoveredSafe(): Promise<Address | null> {
   return owner && isAddressEqual(owner, value.owner) ? value.safe : null;
 }
 export async function saveRecoveredSafe(safe: Address, owner: Address) {
+  const localOwner = await secureStoreAdapter.readAddress();
+  const owners = await getRecoveryClient().readOwners(safe);
+  if (
+    !localOwner ||
+    !isAddressEqual(localOwner, owner) ||
+    owners.length !== 1 ||
+    !isAddressEqual(owners[0], owner)
+  )
+    throw new WalletError(
+      'SAFE_CONFIG_INVALID',
+      'Recovery is not finalized for this phone yet.',
+    );
   await writeJson(RECOVERED_KEY, { safe, owner });
 }
 

@@ -5,6 +5,7 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
+import { OnboardingBackButton } from '../../components/OnboardingBackButton';
 import { ListRow, Steps } from '../../components/ui';
 import {
   describeError,
@@ -78,7 +79,6 @@ export default function ProtectScreen() {
     [backup, friend, swissquote],
   );
 
-  const leave = () => (inOnboarding ? router.replace('/home') : router.back());
   const progress = { intro: 0, backup: 1, friend: 2, review: 3, done: 4 }[step];
 
   return (
@@ -87,7 +87,6 @@ export default function ProtectScreen() {
         step === 'intro' && safe ? (
           <>
             <Button label="Start" onPress={() => setStep('backup')} />
-            <Button label="Set up later" variant="ghost" onPress={leave} />
           </>
         ) : step === 'done' ? (
           <Button
@@ -99,7 +98,18 @@ export default function ProtectScreen() {
         ) : undefined
       }
     >
-      <Stack.Screen options={{ headerBackVisible: !inOnboarding }} />
+      <Stack.Screen
+        options={{
+          headerBackVisible: !inOnboarding,
+          ...(inOnboarding
+            ? {
+                headerLeft: () => (
+                  <OnboardingBackButton route="/protect?onboarding=1" />
+                ),
+              }
+            : {}),
+        }}
+      />
       {inOnboarding && <Steps current={3} total={3} />}
       {!inOnboarding && <Steps current={progress} total={4} />}
       <View className="gap-1 py-2">
@@ -139,7 +149,7 @@ export default function ProtectScreen() {
             <ListRow
               icon="building.columns.fill"
               tone="brand"
-              title="Swissquote"
+              title="Swissquote Wallet"
               subtitle="Approves after checking your identity"
             />
             <ListRow

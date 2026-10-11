@@ -160,6 +160,11 @@ export async function getSafeAccount(): Promise<SafeAccountInfo> {
 export async function clearSafeForDev() {
   if (!__DEV__)
     throw new WalletError('NOT_IMPLEMENTED', 'Reset is for development only.');
+  await clearSafeTracking();
+}
+
+export async function clearSafeTracking() {
+  service = undefined;
   for (const key of [ACCOUNT_KEY, PENDING_KEY, CONFIRMED_KEY])
     await SecureStore.deleteItemAsync(key, OPTIONS);
   await treasuryRelay.writePending(null);

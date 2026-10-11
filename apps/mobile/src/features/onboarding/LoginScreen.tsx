@@ -7,6 +7,9 @@ import { ErrorText, Wordmark } from '../../components/ui';
 import { loginToDemo } from '../../lib/auth';
 import { readPendingRecovery } from '../../lib/recovery';
 import { describeWalletError, getAddress } from '../../lib/wallet';
+import { getMyWallet } from '../../lib/recoveryApi';
+import { currentSafeAddress } from '../../lib/safeWallet';
+import { isAddressEqual } from 'viem';
 import { colors } from '../../theme/colors';
 
 export default function LoginScreen() {
@@ -22,8 +25,22 @@ export default function LoginScreen() {
     try {
       await loginToDemo(username.trim(), password);
       setPassword('');
-      if (await readPendingRecovery()) router.replace('/recover');
-      else router.replace((await getAddress()) ? '/home' : '/start');
+      if (await readPendingRecovery()) {
+        router.replace('/recover');
+      } else {
+        const owner = await getAddress();
+        const registered = await getMyWallet().catch(() => null);
+        if (
+          registered &&
+          (!owner ||
+            !isAddressEqual(
+              await currentSafeAddress(owner),
+              registered.safeAddress,
+            ))
+        )
+          router.replace('/recover');
+        else router.replace(owner ? '/home' : '/start');
+      }
     } catch (e) {
       setError(describeWalletError(e));
       setBusy(false);
@@ -46,8 +63,9 @@ export default function LoginScreen() {
         <Wordmark />
         <Text className="pt-4 text-3xl font-bold text-ink">Welcome back</Text>
         <Text className="text-base leading-6 text-muted">
-          Log in with your Swissquote account. For this demo any username and
-          password work; nothing is checked or stored.
+          Choose a username to create a demo account, or use the same username
+          to return to your existing account. Passwords are simulated in this
+          demo.
         </Text>
       </View>
       <View className="gap-3">

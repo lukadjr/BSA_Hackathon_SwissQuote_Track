@@ -1,3 +1,6 @@
+vi.mock('../../apps/mobile/src/lib/auth', () => ({
+  getSessionToken: async () => null,
+}));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { parseUnits, verifyMessage } from 'viem';

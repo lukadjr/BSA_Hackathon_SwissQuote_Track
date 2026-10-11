@@ -153,6 +153,11 @@ export const secureStoreAdapter: OwnerKeyStorage = {
  */
 export async function deleteOwnerWalletForDev(): Promise<void> {
   if (!__DEV__) throw fail('NOT_IMPLEMENTED', 'Reset is for development only.');
+  await disconnectOwnerWallet();
+}
+
+/** Remove this phone’s owner key when the user disconnects or access is revoked. */
+export async function disconnectOwnerWallet(): Promise<void> {
   assertNative();
   try {
     await SecureStore.deleteItemAsync(PRIVATE_KEY, SECRET_OPTIONS);

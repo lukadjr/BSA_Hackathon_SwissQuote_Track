@@ -1,5 +1,6 @@
 """Mock bank identity plus real signed, on-chain Safe-control attestations."""
 
+import hashlib
 import json
 import os
 import secrets
@@ -81,6 +82,13 @@ class AuditEventDB(Base):
     details = Column(String)
 
 
+class DemoSessionDB(Base):
+    __tablename__ = "demo_sessions"
+    token_hash = Column(String, primary_key=True)
+    user_id = Column(String, index=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+
 Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="Swissquote Demo API",
@@ -103,12 +111,22 @@ def get_db():
 
 def current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+    db: Session = Depends(get_db),
 ) -> str:
     # One server-provisioned demo identity. Never mint a session for a caller's user_id.
     token = os.getenv("MOCK_ACCESS_TOKEN", "")
     user_id = os.getenv("MOCK_USER_ID", "demo-user")
     if len(token) < 32 or not user_id.strip():
         raise HTTPException(status_code=503, detail="Demo authentication is not configured")
+    if (
+        credentials is not None
+        and os.getenv("MOCK_ALLOW_USERNAME_LOGIN", "false").lower() == "true"
+    ):
+        session = db.get(
+            DemoSessionDB, hashlib.sha256(credentials.credentials.encode()).hexdigest()
+        )
+        if session is not None and session.expires_at > utcnow():
+            return session.user_id
     if credentials is None or not secrets.compare_digest(
         credentials.credentials.encode(), token.encode()
     ):
@@ -171,6 +189,32 @@ def wallet_response(wallet: WalletDB) -> dict:
     }
 
 
+class DemoLoginRequest(StrictRequest):
+    username: UserId
+
+
+@app.post("/auth/demo/login")
+def demo_login(
+    req: DemoLoginRequest,
+    user: Annotated[str, Depends(current_user)],
+    db: Session = Depends(get_db),
+):
+    if os.getenv("MOCK_ALLOW_USERNAME_LOGIN", "false").lower() != "true":
+        raise HTTPException(404, "Username demo login is disabled")
+    name = req.username.strip().lower()
+    token = secrets.token_urlsafe(32)
+    mock_profile(name, db)
+    db.add(
+        DemoSessionDB(
+            token_hash=hashlib.sha256(token.encode()).hexdigest(),
+            user_id=name,
+            expires_at=utcnow() + timedelta(days=30),
+        )
+    )
+    db.commit()
+    return {"token": token, "client_id": name, "mocked": True}
+
+
 @app.post("/wallets/register")
 def register_wallet(
     wallet: WalletRegistration,
@@ -183,6 +227,34 @@ def register_wallet(
         existing_wallet.safe_address != wallet.safe_address
         or existing_wallet.owner_address != wallet.owner_address
     ):
+        # Lock the registration before changing it, as confirmation does.
+        db.execute(
+            update(WalletDB)
+            .where(WalletDB.id == existing_wallet.id)
+            .values(owner_address=existing_wallet.owner_address)
+        )
+        from app.funding.routes import FundingDB
+
+        active = (
+            db.query(FundingDB)
+            .filter(
+                FundingDB.user_id == user,
+                FundingDB.status.in_(("queued", "submitted", "reconciling")),
+            )
+            .first()
+        )
+        if active is not None:
+            db.rollback()
+            raise HTTPException(409, "Finish the existing bank operation first")
+        db.query(FundingDB).filter(
+            FundingDB.user_id == user, FundingDB.status == "awaiting_confirmation"
+        ).update(
+            {
+                "status": "expired",
+                "active_user": None,
+                "failure_reason": "wallet_registration_changed",
+            }
+        )
         db.query(ControlAttestationDB).filter_by(user_id=user).update({"invalidated": True})
         db.query(LinkChallengeDB).filter_by(user_id=user).update({"revoked": True})
         audit(db, user, "registration_changed")
@@ -621,3 +693,7 @@ from app.transactions.relay import router as relay_router  # noqa: E402
 
 app.include_router(relay_router)
 Base.metadata.create_all(bind=engine)
+
+from app.dev_database import router as dev_router  # noqa: E402
+
+app.include_router(dev_router)

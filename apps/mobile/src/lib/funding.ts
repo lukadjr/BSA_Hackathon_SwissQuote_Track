@@ -329,8 +329,7 @@ export function describeFundingError(error: unknown): string {
       return 'Bank funding is unavailable. Check the treasury, worker, network and recovery configuration.';
     if (error.status === 403)
       return 'Verified bank identity, wallet control and required security setup are needed.';
-    if (error.status === 409)
-      return 'Another request is active, the wallet changed, or treasury funds are insufficient. Refresh status.';
+    if (error.status === 409) return error.message;
     return error.message;
   }
   return 'Could not complete this step. Check the connection and refresh the existing request.';

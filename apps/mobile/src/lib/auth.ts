@@ -1,6 +1,11 @@
 import * as SecureStore from 'expo-secure-store';
 import { WalletError } from '@swissquote/wallet-core';
-import { ApiError, getClientIdentity, type ClientIdentity } from './api';
+import {
+  ApiError,
+  getClientIdentity,
+  request,
+  type ClientIdentity,
+} from './api';
 
 const SESSION_TOKEN_KEY = 'sq_session_token';
 const SESSION_USER_KEY = 'sq_session_user';
@@ -16,6 +21,14 @@ export async function getSession(): Promise<UserSession | null> {
   try {
     const token = await SecureStore.getItemAsync(SESSION_TOKEN_KEY, OPTIONS);
     if (!token) return null;
+    // Old builds shared one bank identity. Require a username session after migration.
+    if (
+      process.env.EXPO_PUBLIC_DEMO_USERNAME_LOGIN === 'true' &&
+      token === process.env.EXPO_PUBLIC_DEMO_ACCESS_TOKEN?.trim()
+    ) {
+      await clearSession();
+      return null;
+    }
     const username = await SecureStore.getItemAsync(SESSION_USER_KEY, OPTIONS);
     if (!username) throw new Error('Incomplete session');
     return { username, token };
@@ -59,22 +72,39 @@ export async function setSession(
 }
 /**
  * DEMO ONLY: accepts any username and any password; the password is never
- * checked, sent or stored. The backend knows a single mock client and every
- * demo login maps to it through the bundled demo token. Replace with real bank
+ * checked, sent or stored. Username demo login creates or resumes a bank
+ * identity and stores its server-issued session token. Replace with real bank
  * authentication before any non-demo build.
  */
 export const DEMO_DEFAULT_USERNAME = 'demo-user';
 
 export async function loginToDemo(username: string, _password: string) {
-  const token = process.env.EXPO_PUBLIC_DEMO_ACCESS_TOKEN?.trim();
+  const name = username.trim().toLowerCase() || DEMO_DEFAULT_USERNAME;
+  let token = process.env.EXPO_PUBLIC_DEMO_ACCESS_TOKEN?.trim();
   if (!token)
     throw new ApiError(
       'NOT_CONFIGURED',
       'Demo access token is not configured (EXPO_PUBLIC_DEMO_ACCESS_TOKEN).',
     );
+  if (process.env.EXPO_PUBLIC_DEMO_USERNAME_LOGIN === 'true') {
+    const session = await request<{ token: string; client_id: string }>(
+      '/auth/demo/login',
+      { username: name },
+      undefined,
+      'POST',
+      token,
+    );
+    if (
+      session.client_id !== name ||
+      typeof session.token !== 'string' ||
+      session.token.length < 32
+    )
+      throw new ApiError('SERVER', 'Unexpected demo login response.');
+    token = session.token;
+  }
   let profile: ClientIdentity | null = null;
   try {
-    profile = await getClientIdentity();
+    profile = await getClientIdentity(undefined, token);
   } catch (e) {
     // A token the backend refuses would break every later call: say so now.
     if (e instanceof ApiError && e.code === 'UNAUTHORIZED')
@@ -86,7 +116,6 @@ export async function loginToDemo(username: string, _password: string) {
     if (e instanceof ApiError && e.code === 'NOT_CONFIGURED') throw e;
     // Backend offline: the self-custody wallet still works without it.
   }
-  const name = username.trim() || DEMO_DEFAULT_USERNAME;
   await setSession(name, token);
   return { username: name, profile };
 }

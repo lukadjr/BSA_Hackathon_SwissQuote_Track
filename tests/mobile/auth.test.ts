@@ -118,3 +118,39 @@ describe('mock login integration', () => {
     });
   });
 });
+
+it('creates a username session and uses it for later API requests', async () => {
+  vi.stubEnv('EXPO_PUBLIC_DEMO_USERNAME_LOGIN', 'true');
+  const sessionToken = 'new-session-token-'.repeat(3);
+  vi.mocked(fetch).mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ token: sessionToken, client_id: 'alice' }),
+  } as Response);
+  await loginToDemo('Alice', 'demo');
+  expect(fetch).toHaveBeenNthCalledWith(
+    1,
+    'http://demo.test/auth/demo/login',
+    expect.objectContaining({ body: JSON.stringify({ username: 'alice' }) }),
+  );
+  expect((await getSession())?.token).toBe(sessionToken);
+  const { getClientIdentity } = await import('../../apps/mobile/src/lib/api');
+  await getClientIdentity();
+  expect(fetch).toHaveBeenLastCalledWith(
+    'http://demo.test/auth/me',
+    expect.objectContaining({
+      headers: expect.objectContaining({
+        Authorization: `Bearer ${sessionToken}`,
+      }),
+    }),
+  );
+  vi.unstubAllEnvs();
+});
+
+it('migrates an old shared-token login to welcome without touching wallet keys', async () => {
+  await setSession('alice', 'disposable-demo-token');
+  store.values.set('sq_owner_address', 'preserved-owner');
+  vi.stubEnv('EXPO_PUBLIC_DEMO_USERNAME_LOGIN', 'true');
+  expect(await getSession()).toBeNull();
+  expect(store.values.get('sq_owner_address')).toBe('preserved-owner');
+  vi.unstubAllEnvs();
+});

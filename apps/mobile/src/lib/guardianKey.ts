@@ -147,6 +147,11 @@ export async function rememberGuardedWallet(entry: GuardedWallet) {
 
 export async function deleteGuardianKeyForDev() {
   if (!__DEV__) throw new WalletError('NOT_IMPLEMENTED', 'Development only.');
+  await clearGuardianStorage();
+}
+
+/** Explicit full-phone reset, including this phone's guardian commitments. */
+export async function clearGuardianStorage() {
   for (const key of [PRIVATE_KEY, ADDRESS_KEY, GUARDING_KEY])
     await SecureStore.deleteItemAsync(
       key,

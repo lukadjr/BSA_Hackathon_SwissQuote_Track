@@ -1,6 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { WalletLogo } from '../../components/WalletLogo';
 import { Card } from '../../components/Card';
 import { Icon } from '../../components/Icon';
 import { Screen } from '../../components/Screen';
@@ -53,11 +54,7 @@ export default function HomeScreen() {
           onPress={() => router.push('/profile')}
           className="flex-row items-center gap-3 active:opacity-70"
         >
-          <View className="h-10 w-10 items-center justify-center rounded-full bg-ink">
-            <Text className="text-base font-bold text-white">
-              {(name ?? 'S').slice(0, 1).toUpperCase()}
-            </Text>
-          </View>
+          <WalletLogo size={44} />
           <View>
             <Text className="text-xs text-muted">Welcome back</Text>
             <Text className="text-base font-bold text-ink">

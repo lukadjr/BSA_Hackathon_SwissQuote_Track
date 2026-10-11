@@ -6,10 +6,11 @@ const config: ExpoConfig = {
   version: '0.1.0',
   scheme: 'swissquote-wallet',
   orientation: 'portrait',
-  userInterfaceStyle: 'light',
-  icon: './assets/icon.png',
+  userInterfaceStyle: 'automatic',
+  icon: './assets/wallet-light.png',
   ios: {
     supportsTablet: false,
+    icon: { light: './assets/wallet-light.png', dark: './assets/wallet-dark.png' },
     bundleIdentifier: 'com.bsa.swissquotewallet.demo',
   },
   android: { package: 'com.bsa.swissquotewallet.demo' },
