@@ -1,6 +1,7 @@
 """Dispatch relay jobs with the funding worker's single treasury key and journal."""
 
 import json
+from datetime import timedelta
 
 from eth_abi import decode
 from eth_abi.exceptions import DecodingError
@@ -8,6 +9,7 @@ from eth_utils import keccak, to_checksum_address
 from fastapi import HTTPException
 
 from app import chain as recovery_chain
+from app import main as bank
 from app.funding import chain
 from app.transactions.relay import RelayDB, RelayRequest, execution, validate_owner_request
 from app.wallet_registry.control import ControlError
@@ -15,6 +17,9 @@ from app.wallet_registry.control import ControlError
 SUCCESS_TOPIC = "0x" + keccak(text="ExecutionSuccess(bytes32,uint256)").hex()
 FAILURE_TOPIC = "0x" + keccak(text="ExecutionFailure(bytes32,uint256)").hex()
 TRANSFER_TOPIC = "0x" + keccak(text="Transfer(address,address,uint256)").hex()
+# A never-signed job that keeps hitting "temporarily unavailable" stops blocking the
+# single treasury queue (and its Safe's active slot) after this long.
+QUEUE_TIMEOUT = timedelta(minutes=15)
 
 
 def validate(row, db):
@@ -61,10 +66,17 @@ def prepare(row, db, account):
     if int(chain_id, 16) != 11155111:
         raise ControlError("wrong_network")
     call = {"from": account.address, "to": to, "data": data, "value": "0x0"}
-    result, estimate, nonce, price, balance = chain.rpc_batch(
+    try:
+        result, estimate = chain.rpc_batch(
+            [("eth_call", [call, "latest"]), ("eth_estimateGas", [call])]
+        )
+    except ControlError:
+        # rpc_batch reports a revert like an outage. If the node answers a plain
+        # read, the call itself reverts: fail it instead of retrying forever.
+        chain.rpc_batch([("eth_blockNumber", [])])
+        raise HTTPException(409, "Execution simulation reverted") from None
+    nonce, price, balance = chain.rpc_batch(
         [
-            ("eth_call", [call, "latest"]),
-            ("eth_estimateGas", [call]),
             ("eth_getTransactionCount", [account.address, "pending"]),
             ("eth_gasPrice", []),
             ("eth_getBalance", [account.address, "latest"]),
@@ -271,9 +283,10 @@ def process_once(sessions, journal, account, row_id=None):
                 row.status = "reconciling"
                 if saved:
                     row.transaction_hash = saved[1]
-            elif isinstance(error, ControlError) and error.status in (
-                "verification_unavailable",
-                "treasury_eth_unavailable",
+            elif (
+                isinstance(error, ControlError)
+                and error.status in ("verification_unavailable", "treasury_eth_unavailable")
+                and row.created_at > bank.utcnow() - QUEUE_TIMEOUT
             ):
                 row.status = "queued"
             else:

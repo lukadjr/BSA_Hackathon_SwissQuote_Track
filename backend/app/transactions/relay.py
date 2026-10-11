@@ -289,6 +289,20 @@ def queue(db, user, safe, kind, payload, request_id):
     if old:
         if old.user_id != user or json.loads(old.payload) != payload:
             raise HTTPException(409, "Request hash belongs to another authorization")
+        if old.status == "failed" and old.transaction_hash is None:
+            # Refused before anything was signed/broadcast (no journal entry): the
+            # caller just re-validated it, so let the same authorization retry.
+            old.status = "queued"
+            old.active_safe = safe
+            old.failure_reason = None
+            old.created_at = bank.utcnow()
+            try:
+                db.commit()
+            except IntegrityError:
+                db.rollback()
+                raise HTTPException(
+                    409, "A relay operation is already active for this Safe"
+                ) from None
         return old
     row = RelayDB(
         id=request_id,
@@ -324,7 +338,8 @@ def relay(
     if old:
         if old.user_id != user or json.loads(old.payload) != payload:
             raise HTTPException(409, "Conflicting authorization")
-        return response(old)
+        if not (old.status == "failed" and old.transaction_hash is None):
+            return response(old)
     try:
         request_id = validate_owner_request(req)
         chain.configured_address("SWISSQUOTE_TREASURY_ADDRESS")

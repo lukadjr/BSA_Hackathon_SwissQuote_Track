@@ -21,7 +21,8 @@ from eth_account.messages import encode_defunct
 from eth_utils import to_checksum_address
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import StringConstraints
-from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import chain
@@ -123,6 +124,23 @@ def user_wallet(db: Session, user: str, safe: str) -> WalletDB:
     return wallet
 
 
+def proven_wallet(db: Session, user: str, safe: str) -> WalletDB:
+    """A registration alone is only a claim: anyone can register any Safe address.
+
+    Recovery requests and the Swissquote guardian signature need the signed,
+    on-chain-checked link this customer completed for this Safe. The link may be
+    invalidated later (lost phone, new owner key); it still proves the customer
+    once controlled this Safe, which a stranger who only typed its address never did.
+    """
+    from app.main import ControlAttestationDB
+
+    wallet = user_wallet(db, user, safe)
+    linked = db.get(ControlAttestationDB, user)
+    if linked is None or (linked.safe_address or "").lower() != safe:
+        raise HTTPException(status_code=403, detail="Link this Safe to your account first")
+    return wallet
+
+
 # ---------------------------------------------------------------- alerts / push
 
 
@@ -154,7 +172,12 @@ def raise_alert(db: Session, safe: str, key: str, kind: str, message: str) -> No
     db.add(
         AlertDB(safe_address=safe, dedupe_key=key, kind=kind, message=message, created_at=utcnow())
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # The watcher thread and a status request raced on the same alert.
+        db.rollback()
+        return
     send_push(db, safe, "Security alert: wallet recovery", message)
 
 
@@ -185,9 +208,17 @@ def register_push_token(
     db: Session = Depends(get_db),
 ):
     user_wallet(db, user, req.safe_address)
-    if not db.query(PushTokenDB).filter_by(token=req.expo_push_token).first():
+    existing = db.query(PushTokenDB).filter_by(token=req.expo_push_token).first()
+    if existing is None:
         db.add(PushTokenDB(safe_address=req.safe_address, token=req.expo_push_token))
+    else:
+        # One device token follows the account currently signed in on that phone;
+        # otherwise a re-login keeps pushing the previous customer's alerts to it.
+        existing.safe_address = req.safe_address
+    try:
         db.commit()
+    except IntegrityError:
+        db.rollback()
     return {"registered": True}
 
 
@@ -341,9 +372,15 @@ def accept_invite(
     wallet = db.query(WalletDB).filter(WalletDB.user_id == invite.user_id).first()
     if wallet and wallet.owner_address.lower() == req.guardian_address:
         raise HTTPException(status_code=422, detail="The owner key cannot be its own guardian")
-    invite.guardian_address = req.guardian_address
-    invite.accepted_at = utcnow()
+    # Conditional write: two concurrent accepts cannot both win the same invite.
+    accepted = db.execute(
+        update(GuardianInviteDB)
+        .where(GuardianInviteDB.id == invite.id, GuardianInviteDB.guardian_address.is_(None))
+        .values(guardian_address=req.guardian_address, accepted_at=utcnow())
+    )
     db.commit()
+    if accepted.rowcount != 1:
+        raise HTTPException(status_code=409, detail="Invite already used")
     return {"status": "accepted", "safe_address": invite.safe_address}
 
 
@@ -476,6 +513,15 @@ def find_case(db: Session, case_id: str) -> RecoveryCaseDB:
     return case
 
 
+def owned_case(db: Session, user: str, case_id: str) -> RecoveryCaseDB:
+    # Guardians may read and approve any case they know; only the customer who
+    # opened it spends treasury gas on it (and owns the relay row the phone polls).
+    case = find_case(db, case_id)
+    if case.user_id != user:
+        raise HTTPException(status_code=404, detail="Unknown recovery request")
+    return case
+
+
 class CreateCaseRequest(StrictRequest):
     safe_address: Address
     new_owner_address: Address
@@ -487,7 +533,7 @@ def create_case(
     user: Annotated[str, Depends(current_user)],
     db: Session = Depends(get_db),
 ):
-    user_wallet(db, user, req.safe_address)
+    proven_wallet(db, user, req.safe_address)
     state = chain_or_503(lambda: chain.recovery_state(req.safe_address))
     if state is None:
         raise HTTPException(status_code=409, detail="Recovery is not set up for this Safe")
@@ -595,7 +641,7 @@ def swissquote_approve(
     # Mock identity review: the customer's banking session owns this Safe and the
     # customer confirmed the identity check. A real bank adds KYC, a call-back
     # and its own delay before this signer is used.
-    user_wallet(db, user, case.safe_address)
+    proven_wallet(db, user, case.safe_address)
     if case.user_id != user or not req.identity_confirmed:
         raise HTTPException(status_code=403, detail="Identity review not passed")
     try:
@@ -635,7 +681,7 @@ def queue_recovery(case, user, db, kind, data):
 def submit_case(
     case_id: CaseId, user: Annotated[str, Depends(current_user)], db: Session = Depends(get_db)
 ):
-    case = find_case(db, case_id)
+    case = owned_case(db, user, case_id)
     detail = read_case(case_id, user, db)
     approvals = [(a["guardian_address"], a["signature"]) for a in detail["approvals"]]
     if detail["status"] != "collecting" or len(approvals) < detail["threshold"]:
@@ -653,7 +699,7 @@ def submit_case(
 def finalize_case(
     case_id: CaseId, user: Annotated[str, Depends(current_user)], db: Session = Depends(get_db)
 ):
-    case = find_case(db, case_id)
+    case = owned_case(db, user, case_id)
     detail = read_case(case_id, user, db)
     if (
         detail["status"] != "started"
