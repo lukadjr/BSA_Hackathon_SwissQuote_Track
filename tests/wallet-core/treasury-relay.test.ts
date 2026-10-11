@@ -438,6 +438,45 @@ describe('treasury Safe transaction signing and tracking', () => {
       wallet.prepareTransfer({ recipient, amount: '1' }),
     ).rejects.toMatchObject({ code: 'TRANSFER_PENDING' });
   });
+  it('clears tracking already executed on-chain so cancelling a recovery is not blocked', async () => {
+    await wallet.submitTransfer(
+      await wallet.prepareTransfer({ recipient, amount: '1' }),
+    );
+    expect(pending).not.toBeNull();
+    expect(tracked).not.toBeNull();
+    // The transfer executed while the app was closed: the Safe nonce moved on.
+    currentNonce = 1n;
+    status.mockResolvedValue({
+      id: '0x' + '00'.repeat(32),
+      safe_address: safe,
+      kind: 'transfer',
+      status: 'confirmed',
+      transaction_hash: '0x' + '11'.repeat(32),
+      gas_payer: 'swissquote_treasury',
+    });
+    const preview = await wallet.prepareSecurityOperation({
+      kind: 'cancel-recovery',
+    });
+    expect(preview.kind).toBe('cancel-recovery');
+    expect(pending).toBeNull();
+    expect(tracked).toBeNull();
+  });
+  it('clears an authorization the relay refused without a transaction', async () => {
+    await wallet.submitSecurityOperation(
+      await wallet.prepareSecurityOperation({ kind: 'cancel-recovery' }),
+    );
+    status.mockImplementation(async (id: string) => ({
+      id,
+      safe_address: safe,
+      kind: 'cancel-recovery',
+      status: 'failed',
+      transaction_hash: null,
+      gas_payer: 'swissquote_treasury',
+    }));
+    await expect(
+      wallet.prepareSecurityOperation({ kind: 'cancel-recovery' }),
+    ).resolves.toMatchObject({ kind: 'cancel-recovery' });
+  });
 });
 it('encodes only zero-value CALLs inside the pinned batch', () => {
   const calls = [

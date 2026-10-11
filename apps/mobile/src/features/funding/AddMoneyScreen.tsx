@@ -14,6 +14,7 @@ import { formatUnits } from 'viem';
 import type { SafeAccountInfo } from '@swissquote/wallet-core';
 import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
+import { SuccessAnimation } from '../../components/SuccessAnimation';
 import { getClientIdentity, getLinkStatus } from '../../lib/api';
 import { getSafeAccount, getSafeWallet } from '../../lib/safeWallet';
 import {
@@ -278,7 +279,28 @@ export default function AddMoneyScreen() {
           />
         </View>
       )}
-      {intent && (
+      {intent?.status === 'confirmed' && (
+        <SuccessAnimation
+          title={intent.kind === 'deploy' ? 'Wallet ready' : 'Money added'}
+          subtitle={
+            intent.kind === 'deploy'
+              ? 'Your wallet is deployed on Sepolia'
+              : `${formatUnits(BigInt(intent.amount_units), 6)} USDC added`
+          }
+          transactionHash={intent.transaction_hash}
+          onExplorerError={() => setError('Could not open the explorer.')}
+        >
+          <Text className="text-sm text-muted">
+            From Swissquote demo account
+          </Text>
+          {safe && (
+            <Text className="text-sm text-muted">
+              Wallet balance: {safe.tokenBalance} USDC
+            </Text>
+          )}
+        </SuccessAnimation>
+      )}
+      {intent && intent.status !== 'confirmed' && (
         <View className="bg-white border border-line rounded-3xl p-6 gap-3">
           <Text className="text-lg font-semibold text-ink">
             {intent.kind === 'deploy'
@@ -323,11 +345,6 @@ export default function AddMoneyScreen() {
               Processing. The treasury worker must be running. Closing the app
               does not cancel a confirmed request; refresh this request instead
               of creating another.
-            </Text>
-          )}
-          {intent.status === 'confirmed' && (
-            <Text className="text-sm text-muted">
-              Confirmed. Refresh to read the latest blockchain balance.
             </Text>
           )}
           {intent.status === 'failed' && (

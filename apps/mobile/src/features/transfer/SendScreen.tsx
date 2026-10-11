@@ -6,18 +6,21 @@ import type {
   TransferPreview,
   Address,
 } from '@swissquote/wallet-core';
-import * as Linking from 'expo-linking';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
+  Pressable,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
+import { QrScanner } from '../../components/QrScanner';
+import { SuccessAnimation } from '../../components/SuccessAnimation';
+import { ErrorText } from '../../components/ui';
 import { colors } from '../../theme/colors';
 import { Screen } from '../../components/Screen';
 import {
@@ -28,6 +31,7 @@ import {
 } from '../../lib/safeWallet';
 import { recordSentTransfer } from '../../lib/activity';
 import { describeWalletError } from '../../lib/wallet';
+import { parseQrAddress } from '../../lib/qrAddress';
 
 export default function SendScreen() {
   const [recipient, setRecipient] = useState('');
@@ -38,6 +42,8 @@ export default function SendScreen() {
   const [result, setResult] = useState<ConfirmedTransfer | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
   const focused = useRef(false);
   const request = useRef<AbortController | null>(null);
 
@@ -173,7 +179,20 @@ export default function SendScreen() {
     set(value);
     setPreview(null);
     setError(null);
+    setScanError(null);
   }
+
+  function onScanned(text: string) {
+    setScanning(false);
+    const address = parseQrAddress(text);
+    if (!address) {
+      setScanError('This QR code does not contain a valid wallet address.');
+      return;
+    }
+    edit(setRecipient, address);
+  }
+
+  const editable = !busy && !pendingTransfer;
 
   return (
     <Screen>
@@ -182,30 +201,52 @@ export default function SendScreen() {
         Sepolia only · Network fees covered by Swissquote
       </Text>
       <View className="gap-3">
-        <Text className="text-base text-ink">Recipient</Text>
+        <View className="flex-row items-center justify-between">
+          <Text className="text-base text-ink">Recipient</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Scan recipient QR code"
+            disabled={!editable}
+            onPress={() => {
+              setScanError(null);
+              setScanning(true);
+            }}
+            className={`flex-row items-center gap-2 rounded-full border border-line bg-card px-4 py-2 ${editable ? 'active:opacity-80' : 'opacity-50'}`}
+          >
+            <Icon name="qrcode.viewfinder" size={18} color={colors.ink} />
+            <Text className="text-sm font-semibold text-ink">Scan QR</Text>
+          </Pressable>
+        </View>
         <TextInput
           accessibilityLabel="Recipient address"
           placeholder="0x…"
           placeholderTextColor="#596574"
           autoCapitalize="none"
           autoCorrect={false}
-          editable={!busy && !pendingTransfer}
+          editable={editable}
           value={recipient}
           onChangeText={(value) => edit(setRecipient, value)}
           className="bg-white rounded-2xl border border-line p-4 text-base text-ink"
         />
+        <ErrorText error={scanError} />
         <Text className="text-base text-ink">Amount</Text>
         <TextInput
           accessibilityLabel="Amount in test tokens"
           placeholder="0.00"
           placeholderTextColor="#596574"
           keyboardType="decimal-pad"
-          editable={!busy && !pendingTransfer}
+          editable={editable}
           value={amount}
           onChangeText={(value) => edit(setAmount, value)}
           className="bg-white rounded-2xl border border-line p-4 text-base text-ink"
         />
       </View>
+      <QrScanner
+        visible={scanning}
+        title="Scan the recipient's QR code"
+        onClose={() => setScanning(false)}
+        onScanned={onScanned}
+      />
       {!pendingTransfer && (
         <Button
           label={busy ? 'Working…' : 'Preview transfer'}
@@ -298,44 +339,19 @@ export default function SendScreen() {
         </Text>
       )}
       {result && (
-        <View
-          accessibilityLiveRegion="polite"
-          className="bg-white border border-line rounded-3xl p-6 gap-3"
+        <SuccessAnimation
+          title="Transfer confirmed"
+          subtitle={`${formatUnits(BigInt(result.amountUnits), result.decimals)} USDC sent`}
+          transactionHash={result.transactionHash}
+          onExplorerError={() => setError('Could not open the explorer.')}
         >
-          <View className="flex-row items-center gap-3">
-            <View className="h-12 w-12 rounded-full bg-successSoft items-center justify-center">
-              <Icon
-                name="checkmark.circle.fill"
-                size={26}
-                color={colors.success}
-              />
-            </View>
-            <View className="flex-1 gap-1">
-              <Text className="text-lg font-bold text-ink">
-                Transfer confirmed
-              </Text>
-              <Text className="text-sm text-muted">
-                {formatUnits(BigInt(result.amountUnits), result.decimals)} USDC
-                sent
-              </Text>
-            </View>
-          </View>
           <Text selectable className="text-sm text-muted">
             To {shortAddress(result.recipient)}
           </Text>
           <Text className="text-sm text-muted">
             Wallet balance: {result.senderBalanceAfter} USDC
           </Text>
-          <Button
-            label="View on Sepolia explorer"
-            secondary
-            onPress={() => {
-              void Linking.openURL(
-                `https://sepolia.etherscan.io/tx/${result.transactionHash}`,
-              ).catch(() => setError('Could not open the explorer.'));
-            }}
-          />
-        </View>
+        </SuccessAnimation>
       )}
     </Screen>
   );

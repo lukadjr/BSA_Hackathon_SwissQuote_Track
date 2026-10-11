@@ -190,7 +190,52 @@ export function createTreasuryOperations({
       functionName: 'nonce',
     });
   }
+  /**
+   * Drops local tracking that the chain or the relay already settled. A record
+   * left behind (app closed before confirmation, relay database reset) must not
+   * block every later operation, above all cancelling a recovery.
+   */
+  async function settleStaleTracking() {
+    if (submitting) return;
+    try {
+      const pending = await relay.readPending();
+      if (pending) {
+        const hash = hashTypedData(
+          safeTransactionTypedData(pending.safe_address, pending.transaction),
+        );
+        const status = await relay.status(hash);
+        const nonceUsed =
+          (await nonce(pending.safe_address)) >
+          BigInt(pending.transaction.nonce);
+        const refused = status?.status === 'failed' && !status.transaction_hash;
+        if (!nonceUsed && !refused) {
+          // Unknown to the relay after an ambiguous timeout: resend the same bytes.
+          if (!status) await relay.submit(pending);
+          return;
+        }
+        if (nonceUsed && pending.kind === 'transfer') {
+          const transfer = await activity.readPending();
+          if (transfer) await confirmTransfer(transfer).catch(() => null);
+        }
+        await relay.writePending(null);
+        if (pending.kind === 'transfer') await activity.writePending(null);
+        return;
+      }
+      const transfer = await activity.readPending();
+      if (
+        transfer &&
+        transfer.execution === 'treasury' &&
+        (await nonce(transfer.safeAddress)) > BigInt(transfer.nonce)
+      ) {
+        await confirmTransfer(transfer).catch(() => null);
+        await activity.writePending(null);
+      }
+    } catch {
+      // Best effort: the regular pending check below still protects the nonce.
+    }
+  }
   async function assertIdle() {
+    await settleStaleTracking();
     if (
       submitting ||
       (await relay.readPending()) ||
