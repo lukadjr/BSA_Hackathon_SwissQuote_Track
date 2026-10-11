@@ -10,7 +10,10 @@ const config: ExpoConfig = {
   icon: './assets/wallet-light.png',
   ios: {
     supportsTablet: false,
-    icon: { light: './assets/wallet-light.png', dark: './assets/wallet-dark.png' },
+    icon: {
+      light: './assets/wallet-light.png',
+      dark: './assets/wallet-dark.png',
+    },
     bundleIdentifier: 'com.bsa.swissquotewallet.demo',
   },
   android: { package: 'com.bsa.swissquotewallet.demo' },
