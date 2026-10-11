@@ -59,7 +59,8 @@ describe('mock login integration', () => {
       username: 'anyone',
       token: 'disposable-demo-token',
     });
-    expect(store.values.size).toBe(2);
+    expect(store.values.size).toBe(3);
+    expect(store.values.get('sq_wallet_user')).toBe('anyone');
     expect([...store.values.values()]).not.toContain('whatever');
   });
   it('accepts an empty username and password', async () => {
@@ -153,4 +154,34 @@ it('migrates an old shared-token login to welcome without touching wallet keys',
   expect(await getSession()).toBeNull();
   expect(store.values.get('sq_owner_address')).toBe('preserved-owner');
   vi.unstubAllEnvs();
+});
+
+describe('one account per phone wallet', () => {
+  it('refuses another account while the previous account’s key is on the phone', async () => {
+    await loginToDemo('alice', 'x');
+    await clearSession(); // expired token or "Return to welcome": key stays
+    store.values.set('swissquote.owner.address', `0x${'1'.repeat(40)}`);
+    await expect(loginToDemo('bob', 'x')).rejects.toMatchObject({
+      code: 'WALLET_ALREADY_EXISTS',
+    });
+    expect(await getSession()).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await loginToDemo('Alice', 'x');
+    expect((await getSession())?.username).toBe('alice');
+  });
+  it('also protects a recovery in progress on this phone', async () => {
+    await loginToDemo('alice', 'x');
+    await clearSession();
+    store.values.set('swissquote.recovery.pending.v1', '{}');
+    await expect(loginToDemo('bob', 'x')).rejects.toMatchObject({
+      code: 'WALLET_ALREADY_EXISTS',
+    });
+  });
+  it('lets another account in once the phone holds no wallet', async () => {
+    await loginToDemo('alice', 'x');
+    await clearSession();
+    const result = await loginToDemo('bob', 'x');
+    expect(result.username).toBe('bob');
+    expect(store.values.get('sq_wallet_user')).toBe('bob');
+  });
 });

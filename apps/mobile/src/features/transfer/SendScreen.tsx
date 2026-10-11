@@ -113,8 +113,10 @@ export default function SendScreen() {
       if (focused.current) setBusy(false);
     }
   }
+  // Keep polling while a transfer is tracked, even after an error, so a
+  // transient failure never leaves the screen stuck without a retry.
   useEffect(() => {
-    if (!pendingTransfer || error) return;
+    if (!pendingTransfer) return;
     let active = true;
     let checking = false;
     async function poll() {
@@ -172,7 +174,7 @@ export default function SendScreen() {
       clearInterval(timer);
       sub.remove();
     };
-  }, [pendingTransfer, error]);
+  }, [pendingTransfer]);
 
   function edit(set: (value: string) => void, value: string) {
     request.current?.abort();
@@ -196,9 +198,9 @@ export default function SendScreen() {
 
   return (
     <Screen>
-      <Text className="text-2xl font-bold text-ink">Send test tokens</Text>
+      <Text className="text-2xl font-bold text-ink">Send USDC</Text>
       <Text className="text-sm text-muted">
-        Sepolia only · Network fees covered by Swissquote
+        Sepolia test USDC · Network fees covered by Swissquote
       </Text>
       <View className="gap-3">
         <View className="flex-row items-center justify-between">
@@ -231,7 +233,7 @@ export default function SendScreen() {
         <ErrorText error={scanError} />
         <Text className="text-base text-ink">Amount</Text>
         <TextInput
-          accessibilityLabel="Amount in test tokens"
+          accessibilityLabel="Amount in USDC"
           placeholder="0.00"
           placeholderTextColor="#596574"
           keyboardType="decimal-pad"
@@ -279,7 +281,7 @@ export default function SendScreen() {
             Review transfer
           </Text>
           <Text className="text-base text-muted">
-            Amount: {preview.amount} test tokens
+            Amount: {preview.amount} USDC
           </Text>
           <Text selectable className="text-sm text-muted">
             Recipient: {preview.recipient}
@@ -305,7 +307,7 @@ export default function SendScreen() {
           />
         </View>
       )}
-      {pendingTransfer && !error && (
+      {pendingTransfer && (
         <View
           accessibilityLiveRegion="polite"
           className="bg-card border border-line rounded-3xl p-6 gap-4"

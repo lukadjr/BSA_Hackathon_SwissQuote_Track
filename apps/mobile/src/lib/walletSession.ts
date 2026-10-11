@@ -1,4 +1,4 @@
-import { clearSession, getSession } from './auth';
+import { clearPhoneAccount, clearSession, getSession } from './auth';
 import { clearActivityForDev } from './activity';
 import { clearWalletLinked } from './linkStatus';
 import {
@@ -8,7 +8,7 @@ import {
   getSafeWallet,
 } from './safeWallet';
 import { disconnectOwnerWallet } from './secureStoreAdapter';
-import { getRecoveryClient } from './recovery';
+import { clearRecoveryForDev, getRecoveryClient } from './recovery';
 import { getAddress } from './wallet';
 import { WalletError } from '@swissquote/wallet-core';
 import { isAddressEqual } from 'viem';
@@ -26,6 +26,9 @@ export async function resetWallet() {
     disconnectOwnerWallet,
     clearWalletLinked,
     clearSafeTracking,
+    // Also run on its own: clearSafeTracking stops at its first failure, and a
+    // stale pending recovery would send the next login back to /recover.
+    clearRecoveryForDev,
     clearActivityForDev,
     clearGuardianStorage,
   ]) {
@@ -35,6 +38,8 @@ export async function resetWallet() {
       failed = true;
     }
   }
+  // Release the phone for another account only once its wallet is gone.
+  if (!failed) await clearPhoneAccount().catch(() => (failed = true));
   if (failed)
     throw new WalletError(
       'STORAGE_FAILED',
@@ -51,6 +56,7 @@ export async function logoutWallet() {
   await clearWalletLinked();
   await clearSafeTracking();
   await clearActivityForDev();
+  await clearPhoneAccount();
 }
 
 export async function walletAccess(

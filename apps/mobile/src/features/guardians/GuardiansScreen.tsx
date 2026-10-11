@@ -111,7 +111,8 @@ function MyGuardians() {
             : 'Security operation failed.'
           : 'Still pending at Swissquote. Check again shortly.',
       );
-      setPendingOp(!!(await treasuryRelay.readPending()));
+      const op = await treasuryRelay.readPending();
+      setPendingOp(!!op && op.kind !== 'transfer');
       refresh();
     } catch (e) {
       setRelayMessage(describeWalletError(e));

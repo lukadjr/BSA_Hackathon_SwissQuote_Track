@@ -207,7 +207,8 @@ export function createTreasuryOperations({
         const nonceUsed =
           (await nonce(pending.safe_address)) >
           BigInt(pending.transaction.nonce);
-        const refused = status?.status === 'failed' && !status.transaction_hash;
+        // Refused by the relay, or reverted on-chain without using the nonce.
+        const refused = status?.status === 'failed';
         if (!nonceUsed && !refused) {
           // Unknown to the relay after an ambiguous timeout: resend the same bytes.
           if (!status) await relay.submit(pending);

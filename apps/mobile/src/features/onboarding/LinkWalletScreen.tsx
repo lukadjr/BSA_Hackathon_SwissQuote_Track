@@ -169,7 +169,8 @@ export default function LinkWalletScreen() {
           Swissquote account · simulated
         </Text>
         <Text className="text-base text-muted">
-          {identity?.display_name ?? 'Loading bank identity…'}
+          {identity?.display_name ??
+            (loading ? 'Loading bank identity…' : 'Not available')}
         </Text>
         <Text className="text-sm text-muted">
           Identity: {identity?.kyc_status ?? 'unavailable'}
@@ -191,6 +192,7 @@ export default function LinkWalletScreen() {
       {challenge !== null ? (
         <Button
           label={busy ? 'Waiting…' : 'Confirm with Face ID'}
+          busy={busy}
           onPress={() => {
             if (!busy) void onConfirm();
           }}

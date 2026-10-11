@@ -24,6 +24,7 @@ import {
 const keys = [
   'sq_session_token',
   'sq_session_user',
+  'sq_wallet_user',
   'swissquote.owner.address',
   'swissquote.owner.privateKey',
   'swissquote.owner.creating',
@@ -100,4 +101,18 @@ it('keeps the legacy development helper unavailable in release builds', async ()
     code: 'NOT_IMPLEMENTED',
   });
   expect(store.deleteItemAsync).not.toHaveBeenCalled();
+});
+
+it('clears recovery progress even when Safe tracking cleanup fails', async () => {
+  store.deleteItemAsync.mockImplementation(async (key: string) => {
+    if (key === 'swissquote.safe.account.v1')
+      throw new Error('Keychain locked');
+    store.values.delete(key);
+  });
+  await expect(resetWallet()).rejects.toMatchObject({ code: 'STORAGE_FAILED' });
+  expect(store.values.has('swissquote.recovery.pending.v1')).toBe(false);
+  expect(store.values.has('swissquote.safe.recovered.v1')).toBe(false);
+  expect(store.values.has('swissquote.recovery.labels.v1')).toBe(false);
+  // The phone stays bound to its account until the wallet is really gone.
+  expect(store.values.has('sq_wallet_user')).toBe(true);
 });

@@ -14,9 +14,53 @@ const KEY = 'swissquote.treasury.pending.v1';
 const OPTIONS = {
   keychainAccessible: SecureStore.WHEN_PASSCODE_SET_THIS_DEVICE_ONLY,
 };
+function operationHash(value: SafeRelayRequest): string {
+  return hashTypedData(
+    safeTransactionTypedData(value.safe_address, value.transaction),
+  ).toLowerCase();
+}
+
+/**
+ * The relay answered and did not queue this authorization (validation or
+ * conflict). Session expiry, timeouts, rate limits and 5xx stay ambiguous.
+ */
+export function relayRefused(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status !== undefined &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    ![401, 408, 429].includes(error.status)
+  );
+}
+
+/**
+ * A refused authorization was never queued and its nonce is still unused:
+ * keeping its local tracking would block every later operation (including
+ * cancelling a recovery) behind "Check the pending treasury operation".
+ */
+async function forgetRefused(payload: SafeRelayRequest) {
+  const hash = operationHash(payload);
+  const stored = await treasuryRelay.readPending();
+  if (!stored || operationHash(stored) !== hash) return;
+  if (payload.kind === 'transfer') {
+    const { transferActivity } = await import('./safeWallet');
+    const transfer = await transferActivity.readPending();
+    if (transfer && transfer.userOperationHash.toLowerCase() === hash)
+      await transferActivity.writePending(null);
+  }
+  await treasuryRelay.writePending(null);
+}
+
 export const treasuryRelay: TreasuryRelay = {
-  submit: (payload, signal) =>
-    request<RelayStatus>('/transactions/relay', payload, signal),
+  async submit(payload, signal) {
+    try {
+      return await request<RelayStatus>('/transactions/relay', payload, signal);
+    } catch (error) {
+      if (relayRefused(error)) await forgetRefused(payload).catch(() => {});
+      throw error;
+    }
+  },
   async status(hash: Hash) {
     try {
       return await request<RelayStatus>(

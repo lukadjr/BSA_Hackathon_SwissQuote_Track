@@ -111,7 +111,12 @@ export default function RecoverScreen() {
     }
   }
 
-  if (pending === undefined) return <Screen>{<ActivityIndicator />}</Screen>;
+  if (pending === undefined)
+    return (
+      <Screen>
+        {error ? <ErrorText error={error} /> : <ActivityIndicator />}
+      </Screen>
+    );
   if (pending === null)
     return (
       <StartRecovery
@@ -547,6 +552,7 @@ function Approvals({
             <Button
               label="Scan my friend's approval code"
               secondary
+              disabled={busy}
               onPress={() => setScanning(true)}
             />
             <QrScanner

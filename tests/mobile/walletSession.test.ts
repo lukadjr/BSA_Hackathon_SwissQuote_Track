@@ -4,6 +4,7 @@ import { WalletError } from '@swissquote/wallet-core';
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   clearSession: vi.fn(),
+  clearPhoneAccount: vi.fn(),
   disconnect: vi.fn(),
   clearSafe: vi.fn(),
   clearLink: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../apps/mobile/src/lib/auth', () => ({
   getSession: mocks.session,
   clearSession: mocks.clearSession,
+  clearPhoneAccount: mocks.clearPhoneAccount,
 }));
 vi.mock('../../apps/mobile/src/lib/guardianKey', () => ({
   clearGuardianStorage: vi.fn(),
@@ -40,6 +42,7 @@ vi.mock('../../apps/mobile/src/lib/safeWallet', () => ({
 }));
 vi.mock('../../apps/mobile/src/lib/recovery', () => ({
   getRecoveryClient: () => ({ readOwners: mocks.owners }),
+  clearRecoveryForDev: vi.fn(),
 }));
 import {
   logoutWallet,
@@ -68,10 +71,15 @@ it('logout clears the owner, Safe, activity and bank link after closing the sess
     mocks.clearSafe,
     mocks.clearLink,
     mocks.clearActivity,
+    mocks.clearPhoneAccount,
   ])
     expect(fn).toHaveBeenCalledOnce();
   expect(mocks.clearSession.mock.invocationCallOrder[0]).toBeLessThan(
     mocks.disconnect.mock.invocationCallOrder[0],
+  );
+  // The phone is released for another account only after the key is gone.
+  expect(mocks.disconnect.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.clearPhoneAccount.mock.invocationCallOrder[0],
   );
 });
 it('refuses private access without a session and does not read wallet balances', async () => {

@@ -120,7 +120,7 @@ export default function SetupScreen() {
           if (next.status === 'confirmed') setTick((n) => n + 1);
           if (next.status === 'failed')
             setError(
-              'Swissquote could not deploy your Safe. Check the treasury worker and its Sepolia ETH, then retry.',
+              'Swissquote could not deploy your Safe. Tap Refresh to try again.',
             );
         })
         .catch(() => {});
@@ -146,7 +146,8 @@ export default function SetupScreen() {
           !controller.signal.aborted && setError(describeLinkError(e)),
       );
     return () => controller.abort();
-  }, [stage, challenge]);
+    // tick: "Refresh" retries a failed challenge request.
+  }, [stage, challenge, tick]);
 
   async function run(action: (signal: AbortSignal) => Promise<void>) {
     if (pending.current || AppState.currentState !== 'active') return;
@@ -192,8 +193,8 @@ export default function SetupScreen() {
   if (stage === 'key')
     footer = (
       <Button
-        label="Create my keys with Face ID"
-        icon="faceid"
+        label="Create my keys"
+        icon="key.fill"
         busy={busy}
         onPress={() =>
           void run(async () => {

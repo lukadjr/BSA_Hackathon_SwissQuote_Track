@@ -199,7 +199,10 @@ export function GuardianPanel({
     setError(null);
     try {
       const me = await getGuardianAddress();
-      if (!me) throw new Error('no guardian key');
+      if (!me)
+        throw new Error(
+          'This phone has no guardian key yet. Accept an invite first.',
+        );
       // Check the chain, not the QR: this key must guard this Safe at this nonce.
       const state = await getRecoveryClient().readState(payload.safe);
       if (!state || !state.guardians.some((g) => isAddressEqual(g, me)))
@@ -368,6 +371,7 @@ export function GuardianPanel({
           <Button
             label="Cancel"
             secondary
+            disabled={busy}
             onPress={() => setView({ kind: 'home' })}
           />
         </Card>
@@ -424,6 +428,7 @@ export function GuardianPanel({
           <Button
             label="Refuse"
             secondary
+            disabled={busy}
             onPress={() => setView({ kind: 'home' })}
           />
         </Card>

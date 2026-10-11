@@ -9,6 +9,15 @@ import {
 
 const SESSION_TOKEN_KEY = 'sq_session_token';
 const SESSION_USER_KEY = 'sq_session_user';
+// Account that owns this phone's wallet state. Survives a plain session end
+// (expired token, "Return to welcome") and is removed with the owner key.
+const WALLET_USER_KEY = 'sq_wallet_user';
+// Owner key, interrupted key creation, recovery in progress.
+const LOCAL_WALLET_KEYS = [
+  'swissquote.owner.address',
+  'swissquote.owner.creating',
+  'swissquote.recovery.pending.v1',
+];
 const OPTIONS = {
   keychainAccessible: SecureStore.WHEN_PASSCODE_SET_THIS_DEVICE_ONLY,
 };
@@ -70,6 +79,52 @@ export async function setSession(
     );
   }
 }
+async function hasLocalWallet(): Promise<boolean> {
+  for (const key of LOCAL_WALLET_KEYS)
+    if ((await SecureStore.getItemAsync(key, OPTIONS)) !== null) return true;
+  return false;
+}
+
+/**
+ * Another account must never open the wallet left on this phone: its key
+ * would sign for a Safe that belongs to someone else. That account logs in
+ * again (or logs out from its profile, which removes the key) first.
+ */
+async function assertPhoneAccount(username: string): Promise<void> {
+  let owner: string | null;
+  let local: boolean;
+  try {
+    owner = await SecureStore.getItemAsync(WALLET_USER_KEY, OPTIONS);
+    local = owner !== null && owner !== username && (await hasLocalWallet());
+  } catch {
+    throw new WalletError('STORAGE_FAILED', 'Could not read this phone.');
+  }
+  if (local)
+    throw new WalletError(
+      'WALLET_ALREADY_EXISTS',
+      `This phone holds the wallet of "${owner}". Log in as ${owner}, then log out from the profile before using another account.`,
+    );
+}
+async function bindPhoneAccount(username: string): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(WALLET_USER_KEY, username, OPTIONS);
+  } catch {
+    await clearSession();
+    throw new WalletError(
+      'STORAGE_FAILED',
+      'Could not save the demo login session.',
+    );
+  }
+}
+/** Called once the owner key and recovery progress are gone from this phone. */
+export async function clearPhoneAccount(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(WALLET_USER_KEY, OPTIONS);
+  } catch {
+    throw new WalletError('STORAGE_FAILED', 'Could not clear the account.');
+  }
+}
+
 /**
  * DEMO ONLY: accepts any username and any password; the password is never
  * checked, sent or stored. Username demo login creates or resumes a bank
@@ -80,6 +135,7 @@ export const DEMO_DEFAULT_USERNAME = 'demo-user';
 
 export async function loginToDemo(username: string, _password: string) {
   const name = username.trim().toLowerCase() || DEMO_DEFAULT_USERNAME;
+  await assertPhoneAccount(name);
   let token = process.env.EXPO_PUBLIC_DEMO_ACCESS_TOKEN?.trim();
   if (!token)
     throw new ApiError(
@@ -117,5 +173,6 @@ export async function loginToDemo(username: string, _password: string) {
     // Backend offline: the self-custody wallet still works without it.
   }
   await setSession(name, token);
+  await bindPhoneAccount(name);
   return { username: name, profile };
 }

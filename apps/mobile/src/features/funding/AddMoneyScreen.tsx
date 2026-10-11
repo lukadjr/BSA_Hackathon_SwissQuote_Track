@@ -174,7 +174,7 @@ export default function AddMoneyScreen() {
   return (
     <Screen>
       <Text className="text-base text-muted">
-        Transfer test tokens from your Swissquote demo account into your own
+        Transfer test USDC from your Swissquote demo account into your own
         wallet. Bank identity and compliance checks are simulated. Transfers are
         real on Sepolia.
       </Text>
@@ -215,7 +215,7 @@ export default function AddMoneyScreen() {
               : 'Setup needed before bank linking'}
           </Text>
           <Text className="text-sm text-muted">
-            Wallet balance: {safe.tokenBalance} test tokens
+            Wallet balance: {safe.tokenBalance} USDC
           </Text>
         </View>
       )}
@@ -243,7 +243,7 @@ export default function AddMoneyScreen() {
       {safe?.deployed && linked && !active && (
         <View className="gap-3">
           <Text className="text-base font-semibold text-ink">
-            Amount in test tokens
+            Amount in USDC
           </Text>
           <View className="flex-row gap-2">
             {['5', '10', '20'].map((preset) => (
@@ -264,7 +264,7 @@ export default function AddMoneyScreen() {
             ))}
           </View>
           <TextInput
-            accessibilityLabel="Amount in test tokens"
+            accessibilityLabel="Amount in USDC"
             editable={!busy}
             keyboardType="decimal-pad"
             value={amount}
@@ -305,7 +305,7 @@ export default function AddMoneyScreen() {
           <Text className="text-lg font-semibold text-ink">
             {intent.kind === 'deploy'
               ? 'Wallet setup'
-              : `${formatUnits(BigInt(intent.amount_units), 6)} test tokens`}{' '}
+              : `${formatUnits(BigInt(intent.amount_units), 6)} USDC`}{' '}
             · {intent.status.replaceAll('_', ' ')}
           </Text>
           <Text className="text-sm text-muted">
@@ -360,7 +360,7 @@ export default function AddMoneyScreen() {
               onPress={() => {
                 void Linking.openURL(
                   `https://sepolia.etherscan.io/tx/${intent.transaction_hash}`,
-                );
+                ).catch(() => setError('Could not open the explorer.'));
               }}
             />
           )}

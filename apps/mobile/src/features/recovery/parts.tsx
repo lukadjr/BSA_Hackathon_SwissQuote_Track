@@ -246,11 +246,7 @@ export function FriendInvite({
           <ActivityIndicator />
           <Text className="text-sm text-muted">Waiting for your friend…</Text>
         </View>
-        <Button
-          label="Generate a new code"
-          variant="ghost"
-          onPress={restart}
-        />
+        <Button label="Generate a new code" variant="ghost" onPress={restart} />
         <ErrorText error={scanError} />
         <Button
           label="Scan my friend’s code"
@@ -385,7 +381,7 @@ export function SecurityReview({
       <ErrorText error={error} />
       {preview ? (
         <Button
-          label={busy ? 'Waiting for Sepolia…' : confirmLabel}
+          label={busy ? 'Confirming…' : confirmLabel}
           disabled={busy}
           onPress={() => void confirm()}
         />

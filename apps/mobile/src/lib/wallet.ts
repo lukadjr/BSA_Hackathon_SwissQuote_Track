@@ -30,7 +30,7 @@ export function describeWalletError(e: unknown): string {
       case 'WALLET_NOT_FOUND':
         return 'No wallet on this phone yet.';
       case 'WALLET_ALREADY_EXISTS':
-        return 'A wallet already exists on this phone.';
+        return e.message || 'A wallet already exists on this phone.';
       case 'NOT_IMPLEMENTED':
         return 'This feature is not available yet.';
       case 'STORAGE_FAILED':

@@ -31,8 +31,8 @@ export function QrScanner(props: Props) {
       >
         <SafeAreaView className="flex-1 justify-center gap-4 bg-ink p-6">
           <Text className="text-base text-white">
-            The camera is not available in this build. Paste the code your
-            friend shared as text.
+            The camera is not available in this build. Paste the code as text
+            instead.
           </Text>
           <PasteFallback onScanned={props.onScanned} />
           <Button label="Close" secondary onPress={props.onClose} />
