@@ -1,5 +1,5 @@
 // Optional integration fixture: Ganache + OpenZeppelin ERC20 + real Sepolia Safe code.
-// Run with temporary tools installed as documented in backend/README.md.
+// Run with temporary tools installed as documented in README.md (Testing).
 const fs = require('node:fs');
 const path = require('node:path');
 const toolsDir =

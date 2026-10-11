@@ -24,7 +24,7 @@ interface IGuard {
  * Native and configured-token thresholds use their respective smallest units.
  * Only direct low-value transfers are unconditionally allowed. Other calls,
  * batches, approvals and guard removal require a real Swissquote co-signature.
- * Safe module execution bypasses transaction guards; see contracts/README.md.
+ * Safe module execution bypasses transaction guards; see README.md (optional high-value contract).
  */
 contract HighValueGuard is IGuard {
     address public immutable swissquoteSigner;

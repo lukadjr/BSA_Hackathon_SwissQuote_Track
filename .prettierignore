@@ -1,4 +1,6 @@
 README.md
+# Preserve the original README verbatim as a historical plan.
+PLAN.md
 package-lock.json
 backend/
 node_modules/
