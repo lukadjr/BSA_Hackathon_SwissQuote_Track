@@ -13,6 +13,8 @@ from app.wallet_registry.control import CHAIN_ID, FACTORY, ControlError, rpc_bat
 
 USDC = "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238"
 RECOVERY_3D = "0x38275826e1933303e508433dd5f289315da2541c"
+RECOVERY_3MIN_DEMO = "0x949d01d424be050d09c16025dd007cb59b3a8c66"
+RECOVERY_1MIN_DEMO = "0x09fab55bfc4b5bc016aa634a2194fe3186219fd1"
 ADDRESS = re.compile(r"^0x[0-9a-fA-F]{40}$")
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -89,7 +91,15 @@ def security_status(safe):
         return "unprotected_test_demo"
     module = RECOVERY_3D
     if os.getenv("RECOVERY_ALLOW_DEMO", "false") == "true":
-        module = "0x949d01d424be050d09c16025dd007cb59b3a8c66"
+        # Demo Safes use the 1-minute module (or the older 3-minute one).
+        demos = [RECOVERY_1MIN_DEMO, RECOVERY_3MIN_DEMO]
+        flags = rpc_batch(
+            [eth_call(safe, "isModuleEnabled(address)", ["address"], [m]) for m in demos]
+        )
+        module = next(
+            (m for m, f in zip(demos, flags) if decode(["bool"], bytes.fromhex(f[2:]))[0]),
+            RECOVERY_3D,
+        )
     enabled, guardians, threshold = rpc_batch(
         [
             eth_call(safe, "isModuleEnabled(address)", ["address"], [module]),
@@ -102,11 +112,10 @@ def security_status(safe):
         len(addresses) != 3 or len(set(addresses)) != 3 or uint_result(threshold) != 2
     ):
         raise ControlError("recovery_not_ready")
-    return (
-        "recovery_2_of_3_three_days"
-        if module == RECOVERY_3D
-        else "recovery_2_of_3_demo_three_minutes"
-    )
+    return {
+        RECOVERY_3D: "recovery_2_of_3_three_days",
+        RECOVERY_1MIN_DEMO: "recovery_2_of_3_demo_one_minute",
+    }.get(module, "recovery_2_of_3_demo_three_minutes")
 
 
 def deployment(owner):

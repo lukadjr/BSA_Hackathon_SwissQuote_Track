@@ -28,17 +28,22 @@ const LABELS_KEY = 'swissquote.recovery.labels.v1';
 const PENDING_KEY = 'swissquote.recovery.pending.v1';
 const RECOVERED_KEY = 'swissquote.safe.recovered.v1';
 
-/** 3 days in the product; EXPO_PUBLIC_RECOVERY_PERIOD=demoThreeMinutes for demos. */
+/** 3 days in the product; EXPO_PUBLIC_RECOVERY_PERIOD=demoOneMinute for demos. */
 export function recoveryPeriod(): RecoveryPeriod {
-  return process.env.EXPO_PUBLIC_RECOVERY_PERIOD === 'demoThreeMinutes'
-    ? 'demoThreeMinutes'
+  const configured = process.env.EXPO_PUBLIC_RECOVERY_PERIOD;
+  return configured === 'demoOneMinute' || configured === 'demoThreeMinutes'
+    ? configured
     : 'threeDays';
 }
 export function recoveryModule(): Address {
   return recoveryModuleFor(recoveryPeriod());
 }
 export function periodLabel(): string {
-  return recoveryPeriod() === 'threeDays' ? '3 days' : '3 minutes (demo)';
+  return {
+    threeDays: '3 days',
+    demoThreeMinutes: '3 minutes (demo)',
+    demoOneMinute: '1 minute (demo)',
+  }[recoveryPeriod()];
 }
 
 let client: RecoveryClient | undefined;

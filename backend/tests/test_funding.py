@@ -531,6 +531,29 @@ def test_security_check_requires_enabled_seven_day_module_and_three_guardians(mo
     assert chain.security_status(SAFE) == "unprotected_test_demo"
 
 
+def test_security_check_detects_one_minute_demo_module(monkeypatch):
+    from eth_abi import encode
+
+    monkeypatch.delenv("FUNDING_ALLOW_UNPROTECTED_DEMO", raising=False)
+    monkeypatch.setenv("RECOVERY_ALLOW_DEMO", "true")
+    yes, no = ("0x" + encode(["bool"], [v]).hex() for v in (True, False))
+    batches = []
+
+    def rpc(batch):
+        batches.append(batch)
+        if len(batches) == 1:
+            return [yes, no]
+        return [
+            yes,
+            "0x" + encode(["address[]"], [["0x" + n * 40 for n in "123"]]).hex(),
+            "0x" + encode(["uint256"], [2]).hex(),
+        ]
+
+    monkeypatch.setattr(chain, "rpc_batch", rpc)
+    assert chain.security_status(SAFE) == "recovery_2_of_3_demo_one_minute"
+    assert batches[1][1][1][0]["to"] == chain.RECOVERY_1MIN_DEMO
+
+
 def test_snapshot_requires_sepolia_and_six_decimal_token(monkeypatch):
     from eth_abi import encode
 

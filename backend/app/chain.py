@@ -19,7 +19,8 @@ SENTINEL = "0x0000000000000000000000000000000000000001"
 # Candide SocialRecoveryModule deployments (same as wallet-core).
 RECOVERY_MODULES = {
     "0x38275826e1933303e508433dd5f289315da2541c": 3 * 24 * 3600,  # product: 3 days
-    "0x949d01d424be050d09c16025dd007cb59b3a8c66": 3 * 60,  # demo: 3 minutes
+    "0x949d01d424be050d09c16025dd007cb59b3a8c66": 3 * 60,  # legacy demo: 3 minutes
+    "0x09fab55bfc4b5bc016aa634a2194fe3186219fd1": 60,  # demo: 1 minute
 }
 RECOVERY_THRESHOLD = 2
 

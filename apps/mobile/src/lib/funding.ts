@@ -40,7 +40,8 @@ export interface FundingIntent {
     | 'setup_only'
     | 'unprotected_test_demo'
     | 'recovery_2_of_3_three_days'
-    | 'recovery_2_of_3_demo_three_minutes';
+    | 'recovery_2_of_3_demo_three_minutes'
+    | 'recovery_2_of_3_demo_one_minute';
   message: string;
   expires_at: string;
   created_at?: string | null;
@@ -146,6 +147,7 @@ export function validateFundingIntent(
       'unprotected_test_demo',
       'recovery_2_of_3_three_days',
       'recovery_2_of_3_demo_three_minutes',
+      'recovery_2_of_3_demo_one_minute',
     ].includes(i.security_mode) ||
     (i.kind === 'deploy'
       ? i.amount_units !== '0' || i.security_mode !== 'setup_only'

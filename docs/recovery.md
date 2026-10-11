@@ -6,12 +6,12 @@ owner gets an alert and can cancel during that period.
 
 ## Configuration on the Safe
 
-| Item            | Value                                                                                                                                                                                                                |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Owner           | the phone's EOA (SecureStore + Face ID), threshold 1, unchanged                                                                                                                                                      |
-| Recovery module | Candide `SocialRecoveryModule`, `0x38275826E1933303E508433dD5f289315Da2541c` (3 days, Sepolia). Demo: `0x949d01d424bE050D09C16025dd007CB59b3A8c66` (3 minutes) with `EXPO_PUBLIC_RECOVERY_PERIOD=demoThreeMinutes`   |
-| Guardians       | **backup**: key derived from a 12-word phrase written on paper (`m/44'/60'/0'/0/0`), never stored; **Swissquote**: backend test signer; **friend**: a guardian key created in the friend's own Swissquote Wallet app |
-| Threshold       | flat 2 of 3 (Swissquote is not required)                                                                                                                                                                             |
+| Item            | Value                                                                                                                                                                                                                                                             |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner           | the phone's EOA (SecureStore + Face ID), threshold 1, unchanged                                                                                                                                                                                                   |
+| Recovery module | Candide `SocialRecoveryModule`, `0x38275826E1933303E508433dD5f289315Da2541c` (3 days, Sepolia). Demo: `0x09FAb55bFc4B5bC016AA634a2194FE3186219Fd1` (1 minute, deployed with `scripts/deploy-recovery-module.ts`) with `EXPO_PUBLIC_RECOVERY_PERIOD=demoOneMinute` |
+| Guardians       | **backup**: key derived from a 12-word phrase written on paper (`m/44'/60'/0'/0/0`), never stored; **Swissquote**: backend test signer; **friend**: a guardian key created in the friend's own Swissquote Wallet app                                              |
+| Threshold       | flat 2 of 3 (Swissquote is not required)                                                                                                                                                                                                                          |
 
 "Protect wallet" sends ONE owner-signed UserOperation (Face ID) that batches
 `enableModule` + three `addGuardianWithThreshold` calls (thresholds 1, 1, 2). If

@@ -13,18 +13,23 @@ import { WalletError } from '../errors';
 import type { SepoliaClient } from '../safe/account';
 
 /**
- * Candide SocialRecoveryModule deployments (abstractionkit 0.4.0), verified on
- * Sepolia. The grace period is fixed by the deployment, not by a parameter:
- * the 3-day module is the product setting, the 3-minute one is for demos only.
+ * Candide SocialRecoveryModule deployments (abstractionkit 0.4.0) on Sepolia.
+ * The grace period is fixed by the deployment, not by a parameter: the 3-day
+ * module is the product setting and the 1-minute one is the demo setting
+ * (deployed by scripts/deploy-recovery-module.ts from the verified 3-minute
+ * module's creation code). The 3-minute module stays recognised for Safes
+ * that were protected with it.
  */
 export const RECOVERY_MODULES = Object.freeze({
   threeDays: '0x38275826E1933303E508433dD5f289315Da2541c' as Address,
   demoThreeMinutes: '0x949d01d424bE050D09C16025dd007CB59b3A8c66' as Address,
+  demoOneMinute: '0x09FAb55bFc4B5bC016AA634a2194FE3186219Fd1' as Address,
 });
 export type RecoveryPeriod = keyof typeof RECOVERY_MODULES;
 export const RECOVERY_PERIOD_SECONDS: Record<RecoveryPeriod, number> = {
   threeDays: 3 * 24 * 60 * 60,
   demoThreeMinutes: 3 * 60,
+  demoOneMinute: 60,
 };
 /** Any two of: the user's backup key, Swissquote, the trusted friend. */
 export const GUARDIAN_THRESHOLD = 2;

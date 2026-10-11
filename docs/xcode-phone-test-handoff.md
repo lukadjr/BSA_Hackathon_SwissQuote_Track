@@ -98,7 +98,7 @@ protected routes require the disposable token. A queued request will stay queued
 if the worker is stopped or the treasury has no gas.
 
 For a short complete demo on a **fresh Safe**, set backend
-`RECOVERY_ALLOW_DEMO=true` and mobile period `demoThreeMinutes` below. Recovery
+`RECOVERY_ALLOW_DEMO=true` and mobile period `demoOneMinute` below. Recovery
 protection still requires all three guardians and threshold two. Switching env
 values does not change an already-installed contract's waiting period; use a
 fresh disposable Safe to switch policy. Normal configuration remains three days.
@@ -121,7 +121,7 @@ EXPO_PUBLIC_ERC20_TEST_ADDRESS=0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
 EXPO_PUBLIC_RECOVERY_PERIOD=threeDays
 ```
 
-For accelerated acceptance use `EXPO_PUBLIC_RECOVERY_PERIOD=demoThreeMinutes`
+For accelerated acceptance use `EXPO_PUBLIC_RECOVERY_PERIOD=demoOneMinute`
 together with the backend demo flag. No bundler/paymaster endpoint is needed for
 the normal flow. `localhost` on a phone refers to that phone, so use the LAN IP.
 Restart Metro after env changes; rebuild after native app-config/plugin changes.
