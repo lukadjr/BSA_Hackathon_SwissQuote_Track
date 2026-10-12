@@ -6,6 +6,7 @@ import { Card } from '../../components/Card';
 import { formatCountdown } from '../../lib/recovery';
 import type { RecoveryStatus } from '../../lib/recoveryApi';
 import { SecurityReview, Words } from './parts';
+import { BIOMETRY } from '../../lib/biometry';
 
 /**
  * Owner phone: someone started a recovery of this Safe. The deadline comes
@@ -50,7 +51,7 @@ export function RecoveryAlert({
           <SecurityReview
             action={{ kind: 'cancel-recovery' }}
             title="Cancel this recovery"
-            confirmLabel="Cancel with Face ID"
+            confirmLabel={`Cancel with ${BIOMETRY}`}
             onDone={() => {
               setCancelling(false);
               onChanged();
@@ -101,7 +102,7 @@ export function RequestedAlert({
         <SecurityReview
           action={{ kind: 'invalidate-approvals' }}
           title="Void this request"
-          confirmLabel="Void with Face ID"
+          confirmLabel={`Void with ${BIOMETRY}`}
           onDone={() => {
             setVoiding(false);
             onChanged();

@@ -17,6 +17,7 @@ import {
   type LinkChallenge,
   type LinkResult,
 } from '../../lib/walletlink';
+import { BIOMETRY } from '../../lib/biometry';
 
 export default function LinkWalletScreen() {
   const [identity, setIdentity] = useState<ClientIdentity | null>(null);
@@ -191,7 +192,7 @@ export default function LinkWalletScreen() {
       {error !== null && <Text className="text-base text-accent">{error}</Text>}
       {challenge !== null ? (
         <Button
-          label={busy ? 'Waiting…' : 'Confirm with Face ID'}
+          label={busy ? 'Waiting…' : `Confirm with ${BIOMETRY}`}
           busy={busy}
           onPress={() => {
             if (!busy) void onConfirm();

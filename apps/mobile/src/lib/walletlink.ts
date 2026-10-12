@@ -9,6 +9,7 @@ import type { ClientIdentity, LinkChallenge, LinkResult } from './api';
 import { describeWalletError, getAddress, signMessage } from './wallet';
 import { getSafeAccount } from './safeWallet';
 import { isAddress, isAddressEqual } from 'viem';
+import { MAX_CHALLENGE_AHEAD_MS } from './clock';
 
 export type { LinkChallenge, LinkResult };
 
@@ -53,7 +54,7 @@ export function validateLinkChallenge(
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(c.expiresAt) ||
     !Number.isFinite(expires) ||
     expires <= Date.now() ||
-    expires > Date.now() + 310_000
+    expires > Date.now() + MAX_CHALLENGE_AHEAD_MS
   ) {
     throw new ApiError(
       'REJECTED',

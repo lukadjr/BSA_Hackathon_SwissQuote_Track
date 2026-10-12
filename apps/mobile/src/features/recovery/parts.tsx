@@ -32,6 +32,7 @@ import {
 import { getSafeWallet } from '../../lib/safeWallet';
 import { getSession } from '../../lib/auth';
 import { ErrorText } from '../../components/ui';
+import { BIOMETRY } from '../../lib/biometry';
 
 export function AddressLine({
   label,
@@ -308,7 +309,7 @@ export function SecurityReview({
   action,
   title,
   children,
-  confirmLabel = 'Confirm with Face ID',
+  confirmLabel = `Confirm with ${BIOMETRY}`,
   onDone,
 }: {
   action: SecurityAction;

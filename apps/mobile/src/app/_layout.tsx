@@ -21,6 +21,8 @@ export default function RootLayout() {
             headerShadowVisible: false,
             headerBackButtonDisplayMode: 'minimal',
             headerTitleStyle: { fontWeight: '700' },
+            // Android left-aligns titles by default, colliding with headerLeft.
+            headerTitleAlign: 'center',
             contentStyle: { backgroundColor: colors.canvas },
           }}
         >

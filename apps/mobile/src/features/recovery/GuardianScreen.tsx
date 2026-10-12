@@ -36,6 +36,7 @@ import {
 } from '../../lib/recoveryApi';
 import { Divider, ListRow, Section } from '../../components/ui';
 import { AddressLine, ErrorText, Words } from './parts';
+import { BIOMETRY } from '../../lib/biometry';
 
 type Guarded = GuardedWallet & { active: boolean | null };
 
@@ -281,7 +282,7 @@ export function GuardianPanel({
               <Words address={guardian} caption="Your guardian key" />
             ) : (
               <Text className="text-sm leading-5 text-muted">
-                A guardian key is created on this phone, behind Face ID, when
+                A guardian key is created on this phone, behind {BIOMETRY}, when
                 you accept your first invite. It can approve a recovery but can
                 never spend your friend&apos;s money.
               </Text>
@@ -357,14 +358,15 @@ export function GuardianPanel({
           </Text>
           <AddressLine label="Their Safe" address={view.payload.safe} />
           <Text className="text-base text-muted">
-            Accept only if your friend is with you or on the phone. After Face
-            ID, this phone shows 4 words: your friend must see the same words.
+            Accept only if your friend is with you or on the phone. After{' '}
+            {BIOMETRY}, this phone shows 4 words: your friend must see the same
+            words.
           </Text>
           {busy ? (
             <ActivityIndicator />
           ) : (
             <Button
-              label="Accept with Face ID"
+              label={`Accept with ${BIOMETRY}`}
               onPress={() => void accept(view.payload)}
             />
           )}
@@ -421,7 +423,7 @@ export function GuardianPanel({
             <ActivityIndicator />
           ) : (
             <Button
-              label="The words match: approve with Face ID"
+              label={`The words match: approve with ${BIOMETRY}`}
               onPress={() => void approve(view.payload)}
             />
           )}

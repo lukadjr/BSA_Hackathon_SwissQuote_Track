@@ -16,12 +16,19 @@ const config: ExpoConfig = {
     },
     bundleIdentifier: 'com.bsa.swissquotewallet.demo',
   },
-  android: { package: 'com.bsa.swissquotewallet.demo' },
+  android: {
+    package: 'com.bsa.swissquotewallet.demo',
+    adaptiveIcon: {
+      foregroundImage: './assets/wallet-light.png',
+      backgroundColor: '#FFFFFF',
+    },
+  },
   web: { bundler: 'metro', favicon: './assets/favicon.png' },
   plugins: [
     'expo-router',
     'expo-secure-store',
     './plugins/with-scene-lifecycle',
+    './plugins/with-android-cleartext',
     [
       'expo-camera',
       {

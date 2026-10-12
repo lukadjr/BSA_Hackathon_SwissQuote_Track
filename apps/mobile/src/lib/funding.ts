@@ -10,6 +10,7 @@ import type { ClientIdentity } from './api';
 import { getSafeAccount } from './safeWallet';
 import { getAddress, signMessage } from './wallet';
 import { requireVerifiedIdentity } from './walletlink';
+import { MAX_CHALLENGE_AHEAD_MS } from './clock';
 
 export interface TreasuryAccount {
   treasury_address: `0x${string}`;
@@ -169,7 +170,7 @@ export function validateFundingIntent(
     (requireFresh &&
       (i.status !== 'awaiting_confirmation' ||
         expiry <= Date.now() ||
-        expiry > Date.now() + 310_000))
+        expiry > Date.now() + MAX_CHALLENGE_AHEAD_MS))
   ) {
     throw new ApiError(
       'REJECTED',

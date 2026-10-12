@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Modal, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from './Button';
+import { KeyboardAware } from './KeyboardAware';
 
 type Props = {
   visible: boolean;
@@ -61,40 +62,43 @@ function CameraScanner({
       }}
       onRequestClose={onClose}
     >
-      <SafeAreaView className="flex-1 bg-ink p-6 gap-4">
-        <Text className="text-xl font-bold text-white">{title}</Text>
-        {permission?.granted ? (
-          <View className="flex-1 overflow-hidden rounded-3xl">
-            <CameraView
-              style={{ flex: 1 }}
-              facing="back"
-              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-              onBarcodeScanned={({ data }) => {
-                if (done.current) return;
-                done.current = true;
-                onScanned(data);
-              }}
-            />
-          </View>
-        ) : (
-          <View className="flex-1 justify-center gap-4">
-            <Text className="text-base text-white">
-              The camera is used only to read Swissquote Wallet QR codes.
-            </Text>
-            <Button
-              label="Allow camera"
-              onPress={() => void requestPermission()}
-            />
-          </View>
-        )}
-        <PasteFallback
-          onScanned={(text) => {
-            if (done.current) return;
-            done.current = true;
-            onScanned(text);
-          }}
-        />
-        <Button label="Cancel" secondary onPress={onClose} />
+      <SafeAreaView className="flex-1 bg-ink p-6">
+        {/* The paste field and its button stay above the keyboard. */}
+        <KeyboardAware className="flex-1 gap-4">
+          <Text className="text-xl font-bold text-white">{title}</Text>
+          {permission?.granted ? (
+            <View className="flex-1 overflow-hidden rounded-3xl">
+              <CameraView
+                style={{ flex: 1 }}
+                facing="back"
+                barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+                onBarcodeScanned={({ data }) => {
+                  if (done.current) return;
+                  done.current = true;
+                  onScanned(data);
+                }}
+              />
+            </View>
+          ) : (
+            <View className="flex-1 justify-center gap-4">
+              <Text className="text-base text-white">
+                The camera is used only to read Swissquote Wallet QR codes.
+              </Text>
+              <Button
+                label="Allow camera"
+                onPress={() => void requestPermission()}
+              />
+            </View>
+          )}
+          <PasteFallback
+            onScanned={(text) => {
+              if (done.current) return;
+              done.current = true;
+              onScanned(text);
+            }}
+          />
+          <Button label="Cancel" secondary onPress={onClose} />
+        </KeyboardAware>
       </SafeAreaView>
     </Modal>
   );

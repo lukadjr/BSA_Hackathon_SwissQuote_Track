@@ -25,6 +25,7 @@ import {
   startWalletLink,
   type LinkChallenge,
 } from '../../lib/walletlink';
+import { BIOMETRY } from '../../lib/biometry';
 
 type Stage = 'loading' | 'key' | 'deploy' | 'link' | 'done';
 
@@ -209,7 +210,7 @@ export default function SetupScreen() {
       <Button label="Deploying on Sepolia…" busy onPress={() => {}} />
     ) : intent?.status === 'awaiting_confirmation' ? (
       <Button
-        label="Confirm with Face ID"
+        label={`Confirm with ${BIOMETRY}`}
         icon="faceid"
         busy={busy}
         onPress={() =>
@@ -234,7 +235,7 @@ export default function SetupScreen() {
   else if (stage === 'link')
     footer = (
       <Button
-        label={challenge ? 'Sign the link with Face ID' : 'Preparing…'}
+        label={challenge ? `Sign the link with ${BIOMETRY}` : 'Preparing…'}
         icon="faceid"
         busy={busy || !challenge}
         onPress={() =>
@@ -266,7 +267,7 @@ export default function SetupScreen() {
           {stage === 'done' ? 'Your wallet is ready' : 'Set up your wallet'}
         </Text>
         <Text className="text-base leading-6 text-muted">
-          Your keys are created and stay on this phone, protected by Face ID.
+          Your keys are created and stay on this phone, protected by {BIOMETRY}.
           Swissquote pays every network fee and never holds your keys.
         </Text>
       </View>

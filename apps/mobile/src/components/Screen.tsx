@@ -1,6 +1,7 @@
 import type { PropsWithChildren, ReactNode } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAware } from './KeyboardAware';
 
 type Props = PropsWithChildren<{
   /** Large title shown at the top of the scroll view. */
@@ -36,33 +37,38 @@ export function Screen({
         ...(footer || inTabs ? [] : (['bottom'] as const)),
       ]}
     >
-      <ScrollView
-        contentContainerClassName="grow gap-4 px-5 pb-8 pt-4"
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          ) : undefined
-        }
-      >
-        {title && (
-          <View className="gap-1 pb-2">
-            <Text className="text-3xl font-bold text-ink">{title}</Text>
-            {subtitle && (
-              <Text className="text-base leading-6 text-muted">{subtitle}</Text>
-            )}
-          </View>
-        )}
-        {children}
-      </ScrollView>
-      {footer && (
-        <SafeAreaView
-          edges={['bottom']}
-          className="gap-3 bg-canvas px-5 pb-4 pt-3"
+      {/* Keeps footer actions above the keyboard. */}
+      <KeyboardAware>
+        <ScrollView
+          contentContainerClassName="grow gap-4 px-5 pb-8 pt-4"
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            ) : undefined
+          }
         >
-          {footer}
-        </SafeAreaView>
-      )}
+          {title && (
+            <View className="gap-1 pb-2">
+              <Text className="text-3xl font-bold text-ink">{title}</Text>
+              {subtitle && (
+                <Text className="text-base leading-6 text-muted">
+                  {subtitle}
+                </Text>
+              )}
+            </View>
+          )}
+          {children}
+        </ScrollView>
+        {footer && (
+          <SafeAreaView
+            edges={['bottom']}
+            className="gap-3 bg-canvas px-5 pb-4 pt-3"
+          >
+            {footer}
+          </SafeAreaView>
+        )}
+      </KeyboardAware>
     </SafeAreaView>
   );
 }

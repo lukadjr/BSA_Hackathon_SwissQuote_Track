@@ -23,7 +23,7 @@ export function describeWalletError(e: unknown): string {
       case 'AUTH_UNAVAILABLE':
         return (
           e.message ||
-          'Set up Face ID or a device passcode on this phone first.'
+          'Set up biometrics or a device passcode on this phone first.'
         );
       case 'KEY_UNAVAILABLE':
         return 'The key cannot be read (biometrics changed?). Use recovery.';
